@@ -9,13 +9,32 @@ async function parseJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>
 }
 
+function sanitizeDraftPayload(payload: QaFlowDraftPayload): QaFlowDraftPayload {
+  return {
+    ...payload,
+    retest: {
+      ...payload.retest,
+      gifPreviewUrl:
+        payload.retest.gifPreviewUrl && !payload.retest.gifPreviewUrl.startsWith('blob:')
+          ? payload.retest.gifPreviewUrl
+          : '',
+      frames: payload.retest.frames.map((frame) => ({
+        ...frame,
+        // Never persist temporary base64 previews in the workflow payload.
+        imageUrl:
+          frame.imageUrl && !frame.imageUrl.startsWith('data:') ? frame.imageUrl : frame.downloadUrl || frame.fileName || '',
+      })),
+    },
+  }
+}
+
 export async function saveFlowProgress(ticketId: string, payload: QaFlowDraftPayload) {
   const response = await fetch(`/api/chamados/${encodeURIComponent(ticketId)}/progresso`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(sanitizeDraftPayload(payload)),
   })
 
   return parseJson<{ ok: true; updatedAt: string }>(response)
