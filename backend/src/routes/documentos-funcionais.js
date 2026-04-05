@@ -2,6 +2,7 @@ import { Router } from 'express'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequest, getPool, sql } from '../db.js'
 
 const router = Router()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -68,7 +69,38 @@ router.get('/', async (req, res) => {
     const moduleId = String(req.query.moduleId || '').trim()
     const search = String(req.query.search || '').trim().toLowerCase()
 
-    const records = (await readRecords()).map(normalizeRecord).filter((record) => {
+    const pool = await getPool()
+    const dbRecords =
+      pool
+        ? (
+            await (() => {
+              const request = createRequest(pool)
+              return request.query('SELECT * FROM dbo.DocumentosFuncionais WHERE Ativo = 1 ORDER BY DataAtualizacao DESC')
+            })()
+          ).recordset.map((row) =>
+            normalizeRecord({
+              id: row.DocumentoId,
+              projectId: row.ProjetoId ? String(row.ProjetoId) : '',
+              projectName: '',
+              moduleId: row.ModuloId ? String(row.ModuloId) : '',
+              moduleName: '',
+              title: row.Titulo,
+              type: row.TipoDocumento,
+              version: row.Versao,
+              summary: row.Resumo,
+              author: row.Autor,
+              fileName: row.NomeArquivo,
+              storedFileName: row.CaminhoStorage ? path.basename(row.CaminhoStorage) : row.NomeArquivo,
+              downloadUrl: row.DownloadUrl,
+              mimeType: row.MimeType,
+              sizeBytes: row.TamanhoBytes,
+              tags: row.TagsJson ? JSON.parse(row.TagsJson) : [],
+              updatedAt: row.DataAtualizacao ? new Date(row.DataAtualizacao).toISOString() : new Date().toISOString(),
+            }),
+          )
+        : null
+
+    const records = (dbRecords ?? (await readRecords()).map(normalizeRecord)).filter((record) => {
       if (projectId && record.projectId !== projectId) return false
       if (moduleId && record.moduleId !== moduleId) return false
       if (!search) return true
@@ -97,7 +129,31 @@ router.get('/', async (req, res) => {
 
 router.get('/:documentId', async (req, res) => {
   try {
-    const records = (await readRecords()).map(normalizeRecord)
+    const pool = await getPool()
+    const records = pool
+      ? (
+          await (() => {
+            const request = createRequest(pool)
+            request.input('documentoId', sql.NVarChar(80), req.params.documentId)
+            return request.query('SELECT * FROM dbo.DocumentosFuncionais WHERE DocumentoId = @documentoId')
+          })()
+        ).recordset.map((row) =>
+          normalizeRecord({
+            id: row.DocumentoId,
+            projectId: row.ProjetoId ? String(row.ProjetoId) : '',
+            moduleId: row.ModuloId ? String(row.ModuloId) : '',
+            title: row.Titulo,
+            type: row.TipoDocumento,
+            version: row.Versao,
+            summary: row.Resumo,
+            author: row.Autor,
+            fileName: row.NomeArquivo,
+            storedFileName: row.CaminhoStorage ? path.basename(row.CaminhoStorage) : row.NomeArquivo,
+            tags: row.TagsJson ? JSON.parse(row.TagsJson) : [],
+            updatedAt: row.DataAtualizacao ? new Date(row.DataAtualizacao).toISOString() : new Date().toISOString(),
+          }),
+        )
+      : (await readRecords()).map(normalizeRecord)
     const found = records.find((record) => record.id === req.params.documentId)
     if (!found) {
       return res.status(404).json({ message: 'Documento funcional nao encontrado.' })
@@ -166,6 +222,32 @@ router.post('/', async (req, res) => {
     const records = await readRecords()
     records.push(record)
     await writeRecords(records)
+
+    const pool = await getPool()
+    if (pool) {
+      const request = createRequest(pool)
+      request.input('documentoId', sql.NVarChar(80), record.id)
+      request.input('projetoId', sql.Int, Number(projectId))
+      request.input('moduloId', sql.Int, Number(moduleId))
+      request.input('titulo', sql.NVarChar(250), title)
+      request.input('tipoDocumento', sql.NVarChar(80), type)
+      request.input('versao', sql.NVarChar(50), version)
+      request.input('resumo', sql.NVarChar(sql.MAX), summary)
+      request.input('autor', sql.NVarChar(150), author)
+      request.input('tagsJson', sql.NVarChar(sql.MAX), JSON.stringify(tags))
+      request.input('nomeArquivo', sql.NVarChar(255), fileName)
+      request.input('caminhoStorage', sql.NVarChar(500), `${safeProjectId}/${safeModuleId}/${safeFileName}`)
+      request.input('downloadUrl', sql.NVarChar(500), buildDownloadUrl(record))
+      request.input('mimeType', sql.NVarChar(120), mimeType)
+      request.input('tamanhoBytes', sql.BigInt, buffer.byteLength)
+      request.input('dataAtualizacao', sql.DateTime2, new Date(record.updatedAt))
+      await request.query(`
+        INSERT INTO dbo.DocumentosFuncionais
+        (DocumentoId, ProjetoId, ModuloId, Titulo, TipoDocumento, Versao, Resumo, Autor, TagsJson, NomeArquivo, CaminhoStorage, DownloadUrl, MimeType, TamanhoBytes, DataAtualizacao)
+        VALUES
+        (@documentoId, @projetoId, @moduloId, @titulo, @tipoDocumento, @versao, @resumo, @autor, @tagsJson, @nomeArquivo, @caminhoStorage, @downloadUrl, @mimeType, @tamanhoBytes, @dataAtualizacao)
+      `)
+    }
 
     return res.status(201).json({
       ...record,

@@ -28,7 +28,7 @@ function baseConfig() {
     user: process.env.DB_USER || undefined,
     password: process.env.DB_PASSWORD || undefined,
     options: {
-      encrypt: false,
+      encrypt: (process.env.DB_ENCRYPT || 'true') === 'true',
       trustServerCertificate: (process.env.DB_TRUST_SERVER_CERTIFICATE || 'true') === 'true',
       instanceName,
     },

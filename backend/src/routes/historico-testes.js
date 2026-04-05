@@ -2,10 +2,12 @@ import { Router } from 'express'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequest, getPool, sql } from '../db.js'
+import { loadWorkflowProgress } from '../lib/chamados-store.js'
+import { sanitizeSegment, storageRoot } from '../lib/legacy-storage.js'
 
 const router = Router()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const storageRoot = path.resolve(__dirname, '../../../storage')
 const historyRoot = path.join(storageRoot, 'historico-testes')
 const RELATED_WEIGHTS = {
   sameProject: 18,
@@ -19,12 +21,6 @@ const RELATED_WEIGHTS = {
   linkedBug: 7,
 }
 const REGRESSION_THRESHOLD = 60
-
-function sanitizeSegment(value) {
-  return String(value || 'sem-valor')
-    .trim()
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
-}
 
 function buildHistoryId(ticketId) {
   return `hist-${sanitizeSegment(ticketId)}-${Date.now()}`
@@ -83,6 +79,81 @@ async function readAllHistoryRecords() {
   }
 
   return records
+}
+
+async function listHistoryRecordsFromDb() {
+  const pool = await getPool()
+  if (!pool) return null
+
+  const result = await createRequest(pool).query(`
+    SELECT * FROM dbo.HistoricoTestes ORDER BY DataCriacao DESC;
+    SELECT * FROM dbo.HistoricoTesteModulosImpactados;
+    SELECT * FROM dbo.HistoricoTesteTags;
+    SELECT * FROM dbo.HistoricoTesteQuadros;
+  `)
+
+  return mapHistoryRecords(
+    result.recordsets[0] ?? [],
+    result.recordsets[1] ?? [],
+    result.recordsets[2] ?? [],
+    result.recordsets[3] ?? [],
+  )
+}
+
+function mapHistoryRecords(records, impactedModules, tags, frames) {
+  const impactedByHistory = new Map()
+  impactedModules.forEach((row) => {
+    const current = impactedByHistory.get(row.HistoricoId) ?? []
+    current.push(String(row.ModuloId))
+    impactedByHistory.set(row.HistoricoId, current)
+  })
+
+  const tagsByHistory = new Map()
+  tags.forEach((row) => {
+    const current = tagsByHistory.get(row.HistoricoId) ?? []
+    current.push(String(row.Tag))
+    tagsByHistory.set(row.HistoricoId, current)
+  })
+
+  const framesByHistory = new Map()
+  frames.forEach((row) => {
+    const current = framesByHistory.get(row.HistoricoId) ?? []
+    current.push({
+      id: row.QuadroId,
+      name: row.FileName || row.QuadroId,
+      imageUrl: row.DownloadUrl || '',
+      description: row.Descricao || '',
+      fileName: row.FileName || '',
+    })
+    framesByHistory.set(row.HistoricoId, current)
+  })
+
+  return records.map((row) => ({
+    id: row.HistoricoId,
+    ticketId: row.TicketId,
+    bugId: row.BugId || '',
+    projectId: row.ProjetoId ? String(row.ProjetoId) : '',
+    modulePrincipalId: row.ModuloPrincipalId ? String(row.ModuloPrincipalId) : '',
+    portalArea: row.PortalAreaNome || '',
+    fluxoCenario: row.FluxoCenario || '',
+    resumoProblema: row.ResumoProblema || '',
+    comportamentoEsperado: row.ComportamentoEsperado || '',
+    comportamentoObtido: row.ComportamentoObtido || '',
+    resultadoFinal: row.ResultadoFinal || 'Parcial',
+    criticidade: row.Criticidade || 'Media',
+    modulosImpactados: impactedByHistory.get(row.HistoricoId) ?? [],
+    tags: tagsByHistory.get(row.HistoricoId) ?? [],
+    temAutomacao: Boolean(row.TemAutomacao),
+    frameworkAutomacao: row.FrameworkAutomacao || '',
+    caminhoSpec: row.CaminhoSpec || '',
+    dataCriacao: row.DataCriacao ? new Date(row.DataCriacao).toISOString() : new Date().toISOString(),
+    chamadoTitulo: '',
+    documentoWordUrl: '',
+    bugWordUrl: '',
+    evidencias: framesByHistory.get(row.HistoricoId) ?? [],
+    relatedHistoryIds: [],
+    impactAnalysisReady: true,
+  }))
 }
 
 async function collectEvidenceFrames(ticketId, workflow) {
@@ -227,7 +298,7 @@ function buildRelatedRecommendation(record, params) {
 
 router.get('/', async (_req, res) => {
   try {
-    const records = await readAllHistoryRecords()
+    const records = (await listHistoryRecordsFromDb()) ?? (await readAllHistoryRecords())
     records.sort((left, right) => new Date(right.dataCriacao).getTime() - new Date(left.dataCriacao).getTime())
     return res.json(records)
   } catch (error) {
@@ -264,7 +335,7 @@ router.get('/relacionados', async (req, res) => {
       return res.json([])
     }
 
-    const records = await readAllHistoryRecords()
+    const records = (await listHistoryRecordsFromDb()) ?? (await readAllHistoryRecords())
     const scored = records
       .map((record) => buildRelatedRecommendation(record, params))
       .filter((record) => record.impactScore > 0)
@@ -287,7 +358,8 @@ router.get('/relacionados', async (req, res) => {
 
 router.get('/:recordId', async (req, res) => {
   try {
-    const record = await readHistoryRecord(req.params.recordId)
+    const dbRecords = await listHistoryRecordsFromDb()
+    const record = dbRecords?.find((item) => item.id === req.params.recordId) || (await readHistoryRecord(req.params.recordId))
     return res.json(record)
   } catch (error) {
     return res.status(404).json({
@@ -310,7 +382,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Informe o fluxo/cenario testado antes de salvar no historico.' })
     }
 
-    const workflow = await readWorkflow(ticketId)
+    const workflow = await loadWorkflowProgress(ticketId)
     const recordId = buildHistoryId(ticketId)
     const createdAt = new Date().toISOString()
     const evidenceFrames = await collectEvidenceFrames(ticketId, workflow)
@@ -365,6 +437,77 @@ router.post('/', async (req, res) => {
         record.bugWordUrl = bugWordUrl(ticketId, record.bugId)
       } catch {
         record.bugWordUrl = ''
+      }
+    }
+
+    const pool = await getPool()
+    if (pool) {
+      const transaction = new sql.Transaction(pool)
+      await transaction.begin()
+      try {
+        const insertHistory = transaction.request()
+        insertHistory.input('historicoId', sql.NVarChar(120), record.id)
+        insertHistory.input('ticketId', sql.NVarChar(120), record.ticketId)
+        insertHistory.input('bugId', sql.NVarChar(120), record.bugId || null)
+        insertHistory.input('projetoId', sql.Int, Number(record.projectId || 0) || null)
+        insertHistory.input('moduloPrincipalId', sql.Int, Number(record.modulePrincipalId || 0) || null)
+        insertHistory.input('portalAreaNome', sql.NVarChar(120), record.portalArea || '')
+        insertHistory.input('fluxoCenario', sql.NVarChar(300), record.fluxoCenario)
+        insertHistory.input('resumoProblema', sql.NVarChar(sql.MAX), record.resumoProblema)
+        insertHistory.input('comportamentoEsperado', sql.NVarChar(sql.MAX), record.comportamentoEsperado)
+        insertHistory.input('comportamentoObtido', sql.NVarChar(sql.MAX), record.comportamentoObtido)
+        insertHistory.input('resultadoFinal', sql.NVarChar(40), record.resultadoFinal)
+        insertHistory.input('criticidade', sql.NVarChar(30), record.criticidade)
+        insertHistory.input('temAutomacao', sql.Bit, Boolean(record.temAutomacao))
+        insertHistory.input('frameworkAutomacao', sql.NVarChar(50), record.frameworkAutomacao || '')
+        insertHistory.input('caminhoSpec', sql.NVarChar(500), record.caminhoSpec || '')
+        insertHistory.input('dataCriacao', sql.DateTime2, new Date(record.dataCriacao))
+        await insertHistory.query(`
+          INSERT INTO dbo.HistoricoTestes
+          (HistoricoId, TicketId, BugId, ProjetoId, ModuloPrincipalId, PortalAreaNome, FluxoCenario, ResumoProblema, ComportamentoEsperado, ComportamentoObtido, ResultadoFinal, Criticidade, TemAutomacao, FrameworkAutomacao, CaminhoSpec, DataCriacao)
+          VALUES
+          (@historicoId, @ticketId, @bugId, @projetoId, @moduloPrincipalId, @portalAreaNome, @fluxoCenario, @resumoProblema, @comportamentoEsperado, @comportamentoObtido, @resultadoFinal, @criticidade, @temAutomacao, @frameworkAutomacao, @caminhoSpec, @dataCriacao)
+        `)
+
+        for (const moduleId of record.modulosImpactados) {
+          const request = transaction.request()
+          request.input('historicoId', sql.NVarChar(120), record.id)
+          request.input('moduloId', sql.Int, Number(moduleId || 0) || null)
+          await request.query(`
+            INSERT INTO dbo.HistoricoTesteModulosImpactados (HistoricoId, ModuloId)
+            VALUES (@historicoId, @moduloId)
+          `)
+        }
+
+        for (const tag of record.tags) {
+          const request = transaction.request()
+          request.input('historicoId', sql.NVarChar(120), record.id)
+          request.input('tag', sql.NVarChar(120), tag)
+          await request.query(`
+            INSERT INTO dbo.HistoricoTesteTags (HistoricoId, Tag)
+            VALUES (@historicoId, @tag)
+          `)
+        }
+
+        for (const frame of record.evidencias) {
+          const request = transaction.request()
+          request.input('historicoId', sql.NVarChar(120), record.id)
+          request.input('quadroId', sql.NVarChar(120), frame.id)
+          request.input('origemQuadro', sql.NVarChar(20), 'chamado')
+          request.input('fileName', sql.NVarChar(255), frame.fileName || '')
+          request.input('downloadUrl', sql.NVarChar(500), frame.imageUrl || '')
+          request.input('caminhoStorage', sql.NVarChar(500), frame.imageUrl || '')
+          request.input('descricao', sql.NVarChar(sql.MAX), frame.description || '')
+          await request.query(`
+            INSERT INTO dbo.HistoricoTesteQuadros (HistoricoId, QuadroId, OrigemQuadro, FileName, DownloadUrl, CaminhoStorage, Descricao)
+            VALUES (@historicoId, @quadroId, @origemQuadro, @fileName, @downloadUrl, @caminhoStorage, @descricao)
+          `)
+        }
+
+        await transaction.commit()
+      } catch (error) {
+        await transaction.rollback()
+        throw error
       }
     }
 

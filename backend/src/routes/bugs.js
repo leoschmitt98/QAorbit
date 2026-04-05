@@ -11,19 +11,12 @@ import {
   Paragraph,
   TextRun,
 } from 'docx'
-import { createRequest, getPool, queryTrustedJson } from '../db.js'
+import { createRequest, getPool, queryTrustedJson, sql } from '../db.js'
+import { loadWorkflowProgress } from '../lib/chamados-store.js'
+import { sanitizeSegment, storageRoot, ticketDirectory, readLegacyWorkflow } from '../lib/legacy-storage.js'
 
 const router = Router()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const storageRoot = path.resolve(__dirname, '../../../storage')
-
-function sanitizeSegment(value) {
-  return (value || 'sem-valor').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
-}
-
-function ticketDirectory(ticketId) {
-  return path.join(storageRoot, 'chamados', sanitizeSegment(ticketId))
-}
 
 function bugPaths(ticketId, bugId) {
   const safeTicketId = sanitizeSegment(ticketId)
@@ -119,9 +112,11 @@ async function resolveCatalogNames(projectId, moduleId) {
 }
 
 async function loadWorkflow(ticketId) {
-  const workflowPath = path.join(ticketDirectory(ticketId), 'workflow.json')
-  const raw = await fs.readFile(workflowPath, 'utf-8')
-  return JSON.parse(raw)
+  try {
+    return await loadWorkflowProgress(ticketId)
+  } catch {
+    return readLegacyWorkflow(ticketId)
+  }
 }
 
 async function loadBug(ticketId, bugId) {
@@ -131,6 +126,79 @@ async function loadBug(ticketId, bugId) {
 }
 
 async function loadBugById(bugId) {
+  const pool = await getPool()
+  if (pool) {
+    const request = createRequest(pool)
+    request.input('bugId', sql.NVarChar(120), bugId)
+    const result = await request.query(`
+      SELECT * FROM dbo.Bugs WHERE BugId = @bugId;
+      SELECT * FROM dbo.BugPassosReproducao WHERE BugId = @bugId ORDER BY Ordem;
+      SELECT * FROM dbo.BugQuadros WHERE BugId = @bugId ORDER BY OrdemExibicao;
+    `)
+
+    const bugRow = result.recordsets[0]?.[0]
+    if (bugRow) {
+      return {
+        ticketId: bugRow.TicketId,
+        bug: {
+          id: bugRow.BugId,
+          ticketId: bugRow.TicketId,
+          title: bugRow.Titulo,
+          expectedBehavior: bugRow.ComportamentoEsperado || '',
+          obtainedBehavior: bugRow.ComportamentoObtido || '',
+          severity: bugRow.Severidade,
+          priority: bugRow.Prioridade,
+          status: bugRow.StatusBug,
+          createdAt: bugRow.DataCriacao ? new Date(bugRow.DataCriacao).toISOString() : new Date().toISOString(),
+          updatedAt: bugRow.DataAtualizacao ? new Date(bugRow.DataAtualizacao).toISOString() : new Date().toISOString(),
+          reproductionSteps: (result.recordsets[1] ?? []).map((step) => ({
+            id: step.PassoId,
+            order: step.Ordem,
+            description: step.DescricaoPasso,
+            observedResult: step.ResultadoObservado || '',
+          })),
+          evidence: {
+            gifName: '',
+            gifPreviewUrl: '',
+            frames: (result.recordsets[2] ?? []).map((frame) => ({
+              id: frame.QuadroId,
+              name: frame.Nome,
+              imageUrl: frame.DownloadUrl || '',
+              downloadUrl: frame.DownloadUrl || '',
+              fileName: frame.FileName || undefined,
+              persistedAt: frame.PersistedAt ? new Date(frame.PersistedAt).toISOString() : undefined,
+              timestampLabel: frame.TimestampLabel || '00:00',
+              description: frame.Descricao || '',
+              annotations: frame.AnnotationsJson ? JSON.parse(frame.AnnotationsJson) : [],
+              editHistory: frame.EditHistoryJson ? JSON.parse(frame.EditHistoryJson) : [],
+            })),
+          },
+          ticketSnapshot: {
+            ticketId: bugRow.TicketId,
+            ticketTitle: '',
+            projectId: bugRow.ProjetoId ? String(bugRow.ProjetoId) : '',
+            moduleId: bugRow.ModuloId ? String(bugRow.ModuloId) : '',
+            portalArea: '',
+            environment: bugRow.Ambiente || '',
+            version: bugRow.Versao || '',
+            origin: bugRow.Origem || '',
+            baseReference: bugRow.BaseReferencia || '',
+            accessUrl: bugRow.AccessUrl || '',
+            username: bugRow.UsuarioAcesso || '',
+            password: bugRow.SenhaAcesso || '',
+            companyCode: bugRow.EmpresaCodigo || '',
+            unitCode: bugRow.UnidadeCodigo || '',
+            branchName: bugRow.BranchName || '',
+            developerChangelog: bugRow.ChangelogDev || '',
+            customerProblemDescription: bugRow.DescricaoProblemaChamado || '',
+            initialAnalysis: bugRow.AnaliseInicial || '',
+            documentoBaseName: bugRow.DocumentoBaseNome || '',
+          },
+        },
+      }
+    }
+  }
+
   const chamadosDirectory = path.join(storageRoot, 'chamados')
   const entries = await fs.readdir(chamadosDirectory, { withFileTypes: true }).catch(() => [])
 
@@ -389,6 +457,35 @@ function buildConclusionParagraphs(bug, workflow) {
 
 router.get('/', async (_req, res) => {
   try {
+    const pool = await getPool()
+    if (pool) {
+      const result = await createRequest(pool).query(`
+        SELECT
+          BugId AS id,
+          TicketId AS ticketId,
+          Titulo AS title,
+          StatusBug AS status,
+          Severidade AS severity,
+          Prioridade AS priority,
+          DataCriacao AS createdAt,
+          DataAtualizacao AS updatedAt,
+          CAST(ProjetoId AS VARCHAR(20)) AS projectId,
+          CAST(ModuloId AS VARCHAR(20)) AS moduleId
+        FROM dbo.Bugs
+        ORDER BY DataAtualizacao DESC
+      `)
+
+      return res.json(
+        result.recordset.map((row) => ({
+          ...row,
+          createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : new Date().toISOString(),
+          updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : new Date().toISOString(),
+          projectName: row.projectId || '-',
+          moduleName: row.moduleId || '-',
+        })),
+      )
+    }
+
     const chamadosDirectory = path.join(storageRoot, 'chamados')
     const entries = await fs.readdir(chamadosDirectory, { withFileTypes: true }).catch(() => [])
     const bugs = []
@@ -506,6 +603,98 @@ router.put('/:bugId', async (req, res) => {
         initialAnalysis: workflow.problem?.initialAnalysis || '',
         documentoBaseName: workflow.ticket?.documentoBaseName || '',
       },
+    }
+
+    const pool = await getPool()
+    if (pool) {
+      const transaction = new sql.Transaction(pool)
+      await transaction.begin()
+      try {
+        const bugRequest = transaction.request()
+        bugRequest.input('bugId', sql.NVarChar(120), bugId)
+        bugRequest.input('ticketId', sql.NVarChar(120), ticketId)
+        bugRequest.input('titulo', sql.NVarChar(300), bugRecord.title)
+        bugRequest.input('comportamentoEsperado', sql.NVarChar(sql.MAX), bugRecord.expectedBehavior)
+        bugRequest.input('comportamentoObtido', sql.NVarChar(sql.MAX), bugRecord.obtainedBehavior)
+        bugRequest.input('severidade', sql.NVarChar(30), bugRecord.severity)
+        bugRequest.input('prioridade', sql.NVarChar(30), bugRecord.priority)
+        bugRequest.input('statusBug', sql.NVarChar(40), bugRecord.status)
+        bugRequest.input('projetoId', sql.Int, Number(bugRecord.ticketSnapshot.projectId || 0) || null)
+        bugRequest.input('moduloId', sql.Int, Number(bugRecord.ticketSnapshot.moduleId || 0) || null)
+        bugRequest.input('ambiente', sql.NVarChar(120), bugRecord.ticketSnapshot.environment || '')
+        bugRequest.input('versao', sql.NVarChar(120), bugRecord.ticketSnapshot.version || '')
+        bugRequest.input('origem', sql.NVarChar(80), bugRecord.ticketSnapshot.origin || '')
+        bugRequest.input('baseReferencia', sql.NVarChar(sql.MAX), bugRecord.ticketSnapshot.baseReference || '')
+        bugRequest.input('accessUrl', sql.NVarChar(500), bugRecord.ticketSnapshot.accessUrl || '')
+        bugRequest.input('usuarioAcesso', sql.NVarChar(150), bugRecord.ticketSnapshot.username || '')
+        bugRequest.input('senhaAcesso', sql.NVarChar(150), bugRecord.ticketSnapshot.password || '')
+        bugRequest.input('empresaCodigo', sql.NVarChar(80), bugRecord.ticketSnapshot.companyCode || '')
+        bugRequest.input('unidadeCodigo', sql.NVarChar(80), bugRecord.ticketSnapshot.unitCode || '')
+        bugRequest.input('branchName', sql.NVarChar(255), bugRecord.ticketSnapshot.branchName || '')
+        bugRequest.input('changelogDev', sql.NVarChar(sql.MAX), bugRecord.ticketSnapshot.developerChangelog || '')
+        bugRequest.input('descricaoProblemaChamado', sql.NVarChar(sql.MAX), bugRecord.ticketSnapshot.customerProblemDescription || '')
+        bugRequest.input('analiseInicial', sql.NVarChar(sql.MAX), bugRecord.ticketSnapshot.initialAnalysis || '')
+        bugRequest.input('documentoBaseNome', sql.NVarChar(255), bugRecord.ticketSnapshot.documentoBaseName || '')
+        bugRequest.input('dataCriacao', sql.DateTime2, new Date(createdAt))
+        await bugRequest.query(`
+          MERGE dbo.Bugs AS target
+          USING (SELECT @bugId AS BugId) AS src
+          ON target.BugId = src.BugId
+          WHEN MATCHED THEN
+            UPDATE SET
+              TicketId = @ticketId,
+              Titulo = @titulo,
+              ComportamentoEsperado = @comportamentoEsperado,
+              ComportamentoObtido = @comportamentoObtido,
+              Severidade = @severidade,
+              Prioridade = @prioridade,
+              StatusBug = @statusBug,
+              ProjetoId = @projetoId,
+              ModuloId = @moduloId,
+              Ambiente = @ambiente,
+              Versao = @versao,
+              Origem = @origem,
+              BaseReferencia = @baseReferencia,
+              AccessUrl = @accessUrl,
+              UsuarioAcesso = @usuarioAcesso,
+              SenhaAcesso = @senhaAcesso,
+              EmpresaCodigo = @empresaCodigo,
+              UnidadeCodigo = @unidadeCodigo,
+              BranchName = @branchName,
+              ChangelogDev = @changelogDev,
+              DescricaoProblemaChamado = @descricaoProblemaChamado,
+              AnaliseInicial = @analiseInicial,
+              DocumentoBaseNome = @documentoBaseNome,
+              DataAtualizacao = SYSDATETIME()
+          WHEN NOT MATCHED THEN
+            INSERT
+            (BugId, TicketId, Titulo, ComportamentoEsperado, ComportamentoObtido, Severidade, Prioridade, StatusBug, ProjetoId, ModuloId, Ambiente, Versao, Origem, BaseReferencia, AccessUrl, UsuarioAcesso, SenhaAcesso, EmpresaCodigo, UnidadeCodigo, BranchName, ChangelogDev, DescricaoProblemaChamado, AnaliseInicial, DocumentoBaseNome, DataCriacao, DataAtualizacao)
+            VALUES
+            (@bugId, @ticketId, @titulo, @comportamentoEsperado, @comportamentoObtido, @severidade, @prioridade, @statusBug, @projetoId, @moduloId, @ambiente, @versao, @origem, @baseReferencia, @accessUrl, @usuarioAcesso, @senhaAcesso, @empresaCodigo, @unidadeCodigo, @branchName, @changelogDev, @descricaoProblemaChamado, @analiseInicial, @documentoBaseNome, @dataCriacao, SYSDATETIME());
+        `)
+
+        const cleanup = transaction.request()
+        cleanup.input('bugId', sql.NVarChar(120), bugId)
+        await cleanup.query('DELETE FROM dbo.BugPassosReproducao WHERE BugId = @bugId')
+
+        for (const step of bugRecord.reproductionSteps) {
+          const stepRequest = transaction.request()
+          stepRequest.input('passoId', sql.NVarChar(120), step.id)
+          stepRequest.input('bugId', sql.NVarChar(120), bugId)
+          stepRequest.input('ordem', sql.Int, step.order)
+          stepRequest.input('descricaoPasso', sql.NVarChar(sql.MAX), step.description)
+          stepRequest.input('resultadoObservado', sql.NVarChar(sql.MAX), step.observedResult || '')
+          await stepRequest.query(`
+            INSERT INTO dbo.BugPassosReproducao (PassoId, BugId, Ordem, DescricaoPasso, ResultadoObservado)
+            VALUES (@passoId, @bugId, @ordem, @descricaoPasso, @resultadoObservado)
+          `)
+        }
+
+        await transaction.commit()
+      } catch (error) {
+        await transaction.rollback()
+        throw error
+      }
     }
 
     await fs.mkdir(baseDirectory, { recursive: true })
@@ -645,6 +834,52 @@ router.post('/:bugId/quadros', async (req, res) => {
     })
     await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf-8')
 
+    const pool = await getPool()
+    if (pool) {
+      const request = createRequest(pool)
+      request.input('quadroId', sql.NVarChar(120), `${safeBugId}-${fileName}`)
+      request.input('bugId', sql.NVarChar(120), bugId)
+      request.input('nome', sql.NVarChar(255), fileName)
+      request.input('timestampLabel', sql.NVarChar(50), timestampLabel)
+      request.input('descricao', sql.NVarChar(sql.MAX), description || '')
+      request.input('fileName', sql.NVarChar(255), fileName)
+      request.input(
+        'downloadUrl',
+        sql.NVarChar(500),
+        `/storage/chamados/${encodeURIComponent(safeTicketId)}/bugs/${encodeURIComponent(safeBugId)}/quadros/${encodeURIComponent(fileName)}`,
+      )
+      request.input(
+        'caminhoStorage',
+        sql.NVarChar(500),
+        `chamados/${safeTicketId}/bugs/${safeBugId}/quadros/${fileName}`,
+      )
+      request.input('persistedAt', sql.DateTime2, new Date(persistedAt))
+      request.input('ordemExibicao', sql.Int, metadata.length)
+      request.input('annotationsJson', sql.NVarChar(sql.MAX), '[]')
+      request.input('editHistoryJson', sql.NVarChar(sql.MAX), '[]')
+      await request.query(`
+        MERGE dbo.BugQuadros AS target
+        USING (SELECT @quadroId AS QuadroId) AS src
+        ON target.QuadroId = src.QuadroId
+        WHEN MATCHED THEN
+          UPDATE SET
+            BugId = @bugId,
+            Nome = @nome,
+            TimestampLabel = @timestampLabel,
+            Descricao = @descricao,
+            FileName = @fileName,
+            DownloadUrl = @downloadUrl,
+            CaminhoStorage = @caminhoStorage,
+            PersistedAt = @persistedAt,
+            OrdemExibicao = @ordemExibicao,
+            AnnotationsJson = @annotationsJson,
+            EditHistoryJson = @editHistoryJson
+        WHEN NOT MATCHED THEN
+          INSERT (QuadroId, BugId, Nome, TimestampLabel, Descricao, FileName, DownloadUrl, CaminhoStorage, PersistedAt, OrdemExibicao, AnnotationsJson, EditHistoryJson)
+          VALUES (@quadroId, @bugId, @nome, @timestampLabel, @descricao, @fileName, @downloadUrl, @caminhoStorage, @persistedAt, @ordemExibicao, @annotationsJson, @editHistoryJson);
+      `)
+    }
+
     return res.status(201).json({
       id: `${safeBugId}-${fileName}`,
       fileName,
@@ -670,6 +905,14 @@ router.delete('/:bugId/quadros/:ticketId/:fileName', async (req, res) => {
     const metadata = await readMetadata(metadataPath)
     const nextMetadata = metadata.filter((entry) => entry.fileName !== fileName)
     await fs.writeFile(metadataPath, JSON.stringify(nextMetadata, null, 2), 'utf-8')
+
+    const pool = await getPool()
+    if (pool) {
+      const request = createRequest(pool)
+      request.input('bugId', sql.NVarChar(120), req.params.bugId)
+      request.input('fileName', sql.NVarChar(255), fileName)
+      await request.query('DELETE FROM dbo.BugQuadros WHERE BugId = @bugId AND FileName = @fileName')
+    }
     return res.json({ ok: true })
   } catch (error) {
     return res.status(500).json({
@@ -695,6 +938,21 @@ router.patch('/:bugId/quadros/:ticketId/:fileName', async (req, res) => {
     )
 
     await fs.writeFile(metadataPath, JSON.stringify(nextMetadata, null, 2), 'utf-8')
+
+    const pool = await getPool()
+    if (pool) {
+      const request = createRequest(pool)
+      request.input('bugId', sql.NVarChar(120), req.params.bugId)
+      request.input('fileName', sql.NVarChar(255), fileName)
+      request.input('descricao', sql.NVarChar(sql.MAX), typeof req.body?.description === 'string' ? req.body.description : '')
+      request.input('timestampLabel', sql.NVarChar(50), typeof req.body?.timestampLabel === 'string' ? req.body.timestampLabel : '')
+      await request.query(`
+        UPDATE dbo.BugQuadros
+        SET Descricao = CASE WHEN @descricao = '' THEN Descricao ELSE @descricao END,
+            TimestampLabel = CASE WHEN @timestampLabel = '' THEN TimestampLabel ELSE @timestampLabel END
+        WHERE BugId = @bugId AND FileName = @fileName
+      `)
+    }
     return res.json({ ok: true })
   } catch (error) {
     return res.status(500).json({
