@@ -114,6 +114,14 @@ export function BugEvidenceCapture({ ticketId, bugId, value, onChange }: BugEvid
     return () => window.removeEventListener('keydown', handleKeydown)
   }, [isExpanded])
 
+  useEffect(() => {
+    return () => {
+      if (value.gifPreviewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(value.gifPreviewUrl)
+      }
+    }
+  }, [value.gifPreviewUrl])
+
   async function buildPlayerFrames(file: File) {
     const arrayBuffer = await file.arrayBuffer()
     const gif = parseGIF(arrayBuffer)
@@ -187,6 +195,9 @@ export function BugEvidenceCapture({ ticketId, bugId, value, onChange }: BugEvid
     if (!file) return
 
     const previewUrl = URL.createObjectURL(file)
+    if (value.gifPreviewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(value.gifPreviewUrl)
+    }
     const nextPlayerFrames = await buildPlayerFrames(file)
     setPlayerFrames(nextPlayerFrames)
     setCurrentPlayerFrameIndex(0)
@@ -348,6 +359,11 @@ export function BugEvidenceCapture({ ticketId, bugId, value, onChange }: BugEvid
 
   function renderPlayerViewer(mode: 'default' | 'expanded') {
     const isModal = mode === 'expanded'
+    const mediaKey = currentPlayerFrame
+      ? `frame-${currentPlayerFrame.id}`
+      : value.gifPreviewUrl
+        ? `preview-${value.gifName || 'gif'}`
+        : 'empty-player'
 
     return (
       <div className={cn('space-y-4 rounded-[28px] border border-border bg-black/20', isModal ? 'w-full max-w-6xl p-6 shadow-[0_0_60px_rgba(0,0,0,0.45)]' : 'p-5')}>
@@ -375,15 +391,17 @@ export function BugEvidenceCapture({ ticketId, bugId, value, onChange }: BugEvid
         </div>
 
         <div className={cn('overflow-hidden rounded-[28px] border border-border bg-[radial-gradient(circle_at_top,rgba(163,255,18,0.08),transparent_55%),rgba(0,0,0,0.45)]', isModal ? 'min-h-[70vh]' : 'min-h-[24rem]')}>
-          {currentPlayerFrame ? (
-            <img src={currentPlayerFrame.dataUrl} alt="Quadro atual do GIF do bug" className={cn('w-full object-contain', isModal ? 'h-[70vh]' : 'h-[26rem] xl:h-[32rem]')} />
-          ) : value.gifPreviewUrl ? (
-            <img src={value.gifPreviewUrl} alt="Preview do GIF do bug" className={cn('w-full object-contain', isModal ? 'h-[70vh]' : 'h-[26rem] xl:h-[32rem]')} />
-          ) : (
-            <div className={cn('flex items-center justify-center px-6 text-center text-sm text-muted', isModal ? 'h-[70vh]' : 'h-[26rem] xl:h-[32rem]')}>
-              O player do bug aparecera aqui apos o upload do GIF.
-            </div>
-          )}
+          <div key={mediaKey}>
+            {currentPlayerFrame ? (
+              <img src={currentPlayerFrame.dataUrl} alt="Quadro atual do GIF do bug" className={cn('w-full object-contain', isModal ? 'h-[70vh]' : 'h-[26rem] xl:h-[32rem]')} />
+            ) : value.gifPreviewUrl ? (
+              <img src={value.gifPreviewUrl} alt="Preview do GIF do bug" className={cn('w-full object-contain', isModal ? 'h-[70vh]' : 'h-[26rem] xl:h-[32rem]')} />
+            ) : (
+              <div className={cn('flex items-center justify-center px-6 text-center text-sm text-muted', isModal ? 'h-[70vh]' : 'h-[26rem] xl:h-[32rem]')}>
+                O player do bug aparecera aqui apos o upload do GIF.
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white/[0.03] px-4 py-3">

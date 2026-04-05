@@ -131,6 +131,14 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
     return () => window.removeEventListener('keydown', handleKeydown)
   }, [isExpanded])
 
+  useEffect(() => {
+    return () => {
+      if (value.gifPreviewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(value.gifPreviewUrl)
+      }
+    }
+  }, [value.gifPreviewUrl])
+
   function update<K extends keyof RetestExecutionDraft>(key: K, nextValue: RetestExecutionDraft[K]) {
     onChange({ ...value, [key]: nextValue })
   }
@@ -210,6 +218,9 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
     if (!file) return
 
     const previewUrl = URL.createObjectURL(file)
+    if (value.gifPreviewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(value.gifPreviewUrl)
+    }
     const nextPlayerFrames = await buildPlayerFrames(file)
 
     setPlayerFrames(nextPlayerFrames)
@@ -465,6 +476,11 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
 
   function renderPlayerViewer(mode: 'default' | 'expanded') {
     const isModal = mode === 'expanded'
+    const mediaKey = currentPlayerFrame
+      ? `frame-${currentPlayerFrame.id}`
+      : value.gifPreviewUrl
+        ? `preview-${value.gifName || 'gif'}`
+        : 'empty-player'
 
     return (
       <div
@@ -503,28 +519,30 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
             isModal ? 'min-h-[70vh]' : 'min-h-[26rem]',
           )}
         >
-          {currentPlayerFrame ? (
-            <img
-              src={currentPlayerFrame.dataUrl}
-              alt="Quadro atual do player"
-              className={cn('w-full object-contain', isModal ? 'h-[70vh]' : 'h-[28rem] xl:h-[34rem]')}
-            />
-          ) : value.gifPreviewUrl ? (
-            <img
-              src={value.gifPreviewUrl}
-              alt="Preview do GIF"
-              className={cn('w-full object-contain', isModal ? 'h-[70vh]' : 'h-[28rem] xl:h-[34rem]')}
-            />
-          ) : (
-            <div
-              className={cn(
-                'flex items-center justify-center px-6 text-center text-sm text-muted',
-                isModal ? 'h-[70vh]' : 'h-[28rem] xl:h-[34rem]',
-              )}
-            >
-              O player aparecera aqui apos o upload do GIF.
-            </div>
-          )}
+          <div key={mediaKey}>
+            {currentPlayerFrame ? (
+              <img
+                src={currentPlayerFrame.dataUrl}
+                alt="Quadro atual do player"
+                className={cn('w-full object-contain', isModal ? 'h-[70vh]' : 'h-[28rem] xl:h-[34rem]')}
+              />
+            ) : value.gifPreviewUrl ? (
+              <img
+                src={value.gifPreviewUrl}
+                alt="Preview do GIF"
+                className={cn('w-full object-contain', isModal ? 'h-[70vh]' : 'h-[28rem] xl:h-[34rem]')}
+              />
+            ) : (
+              <div
+                className={cn(
+                  'flex items-center justify-center px-6 text-center text-sm text-muted',
+                  isModal ? 'h-[70vh]' : 'h-[28rem] xl:h-[34rem]',
+                )}
+              >
+                O player aparecera aqui apos o upload do GIF.
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white/[0.03] px-4 py-3">
