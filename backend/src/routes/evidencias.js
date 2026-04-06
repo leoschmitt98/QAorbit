@@ -288,6 +288,18 @@ function buildConclusionParagraphs(workflow) {
   return [new Paragraph('O problema persiste apos o reteste e requer nova analise do time responsavel.')]
 }
 
+function buildScenarioFramePath(ticketId, scenarioId, fileName) {
+  return path.join(
+    storageRoot,
+    'chamados',
+    sanitizeTicketId(ticketId),
+    'cenarios',
+    sanitizeTicketId(scenarioId),
+    'quadros',
+    fileName,
+  )
+}
+
 router.get('/:ticketId/export-docx', async (req, res) => {
   try {
     const workflow = await loadWorkflow(req.params.ticketId)
@@ -388,12 +400,30 @@ router.get('/:ticketId/export-docx', async (req, res) => {
         )
 
         const scenarioMetadata = await loadScenarioMetadata(req.params.ticketId, scenario.id)
-        const orderedScenarioFrames = scenarioMetadata
-          .map((entry) => ({
-            ...entry,
-            filePath: path.join(storageRoot, 'chamados', safeTicketId, 'cenarios', sanitizeTicketId(scenario.id), 'quadros', entry.fileName),
-          }))
-          .filter((entry) => entry.fileName)
+        const scenarioWorkflowFrames = Array.isArray(scenario.frames) ? scenario.frames : []
+
+        const orderedScenarioFrames = (
+          scenarioMetadata.length > 0
+            ? scenarioMetadata.map((entry) => {
+                const linkedFrame = scenarioWorkflowFrames.find(
+                  (item) => item.id === entry.id || item.fileName === entry.fileName,
+                )
+
+                return {
+                  ...entry,
+                  description: entry.description || linkedFrame?.description || '',
+                  filePath: buildScenarioFramePath(req.params.ticketId, scenario.id, entry.fileName),
+                }
+              })
+            : scenarioWorkflowFrames.map((frame) => ({
+                id: frame.id,
+                fileName: frame.fileName,
+                description: frame.description || '',
+                filePath: frame.fileName
+                  ? buildScenarioFramePath(req.params.ticketId, scenario.id, frame.fileName)
+                  : '',
+              }))
+        ).filter((entry) => entry.fileName)
 
         for (let frameIndex = 0; frameIndex < orderedScenarioFrames.length; frameIndex += 1) {
           const frame = orderedScenarioFrames[frameIndex]
