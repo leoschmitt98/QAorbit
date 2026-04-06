@@ -272,6 +272,9 @@ export interface ComplementaryScenario {
   expectedResult: string
   obtainedResult: string
   status: RetestStatus
+  gifName?: string
+  gifPreviewUrl?: string
+  frames?: RetestFrame[]
 }
 
 export interface FlowReuseClassification {

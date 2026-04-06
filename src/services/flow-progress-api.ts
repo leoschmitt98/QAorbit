@@ -25,6 +25,16 @@ function sanitizeDraftPayload(payload: QaFlowDraftPayload): QaFlowDraftPayload {
           frame.imageUrl && !frame.imageUrl.startsWith('data:') ? frame.imageUrl : frame.downloadUrl || frame.fileName || '',
       })),
     },
+    scenarios: payload.scenarios.map((scenario) => ({
+      ...scenario,
+      gifPreviewUrl:
+        scenario.gifPreviewUrl && !scenario.gifPreviewUrl.startsWith('blob:') ? scenario.gifPreviewUrl : '',
+      frames: (scenario.frames ?? []).map((frame) => ({
+        ...frame,
+        imageUrl:
+          frame.imageUrl && !frame.imageUrl.startsWith('data:') ? frame.imageUrl : frame.downloadUrl || frame.fileName || '',
+      })),
+    })),
   }
 }
 

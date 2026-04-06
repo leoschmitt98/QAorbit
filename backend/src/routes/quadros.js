@@ -11,6 +11,10 @@ function sanitizeTicketId(ticketId) {
   return (ticketId || 'sem-ticket').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
 }
 
+function sanitizeScenarioId(scenarioId) {
+  return (scenarioId || 'sem-cenario').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+}
+
 function ensurePngDataUrl(imageDataUrl) {
   const match = imageDataUrl.match(/^data:image\/png;base64,(.+)$/)
   if (!match) {
@@ -25,6 +29,14 @@ async function ensureTicketFolder(ticketId) {
   const framesDirectory = path.join(storageRoot, 'chamados', safeTicketId, 'quadros')
   await fs.mkdir(framesDirectory, { recursive: true })
   return { safeTicketId, framesDirectory }
+}
+
+async function ensureScenarioFolder(ticketId, scenarioId) {
+  const safeTicketId = sanitizeTicketId(ticketId)
+  const safeScenarioId = sanitizeScenarioId(scenarioId)
+  const framesDirectory = path.join(storageRoot, 'chamados', safeTicketId, 'cenarios', safeScenarioId, 'quadros')
+  await fs.mkdir(framesDirectory, { recursive: true })
+  return { safeTicketId, safeScenarioId, framesDirectory }
 }
 
 async function nextFrameFileName(framesDirectory) {
@@ -92,6 +104,50 @@ router.post('/', async (req, res) => {
   }
 })
 
+router.post('/cenario', async (req, res) => {
+  try {
+    const { ticketId, scenarioId, imageDataUrl, timestampLabel, description } = req.body ?? {}
+
+    if (!ticketId || !scenarioId || !imageDataUrl || !timestampLabel) {
+      return res.status(400).json({ message: 'ticketId, scenarioId, imageDataUrl e timestampLabel sao obrigatorios.' })
+    }
+
+    const pngBase64 = ensurePngDataUrl(imageDataUrl)
+    const { safeTicketId, safeScenarioId, framesDirectory } = await ensureScenarioFolder(ticketId, scenarioId)
+    const fileName = await nextFrameFileName(framesDirectory)
+    const filePath = path.join(framesDirectory, fileName)
+    const persistedAt = new Date().toISOString()
+    const metadataPath = path.join(framesDirectory, 'metadata.json')
+
+    await fs.writeFile(filePath, Buffer.from(pngBase64, 'base64'))
+
+    const metadata = await readMetadata(metadataPath)
+    metadata.push({
+      id: `${safeTicketId}-${safeScenarioId}-${fileName}`,
+      originalTicketId: ticketId,
+      originalScenarioId: scenarioId,
+      fileName,
+      timestampLabel,
+      description: description || '',
+      persistedAt,
+    })
+    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf-8')
+
+    return res.status(201).json({
+      id: `${safeTicketId}-${safeScenarioId}-${fileName}`,
+      fileName,
+      imageUrl: `/storage/chamados/${encodeURIComponent(safeTicketId)}/cenarios/${encodeURIComponent(safeScenarioId)}/quadros/${encodeURIComponent(fileName)}`,
+      downloadUrl: `/storage/chamados/${encodeURIComponent(safeTicketId)}/cenarios/${encodeURIComponent(safeScenarioId)}/quadros/${encodeURIComponent(fileName)}`,
+      persistedAt,
+    })
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Nao foi possivel persistir o quadro do cenário auxiliar.',
+      detail: error instanceof Error ? error.message : 'Erro desconhecido',
+    })
+  }
+})
+
 router.delete('/:ticketId/:fileName', async (req, res) => {
   try {
     const safeTicketId = sanitizeTicketId(req.params.ticketId)
@@ -138,6 +194,59 @@ router.patch('/:ticketId/:fileName', async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: 'Nao foi possivel atualizar os metadados do quadro.',
+      detail: error instanceof Error ? error.message : 'Erro desconhecido',
+    })
+  }
+})
+
+router.delete('/cenario/:ticketId/:scenarioId/:fileName', async (req, res) => {
+  try {
+    const safeTicketId = sanitizeTicketId(req.params.ticketId)
+    const safeScenarioId = sanitizeScenarioId(req.params.scenarioId)
+    const fileName = path.basename(req.params.fileName)
+    const framesDirectory = path.join(storageRoot, 'chamados', safeTicketId, 'cenarios', safeScenarioId, 'quadros')
+    const filePath = path.join(framesDirectory, fileName)
+    const metadataPath = path.join(framesDirectory, 'metadata.json')
+
+    await fs.rm(filePath, { force: true })
+
+    const metadata = await readMetadata(metadataPath)
+    const nextMetadata = metadata.filter((entry) => entry.fileName !== fileName)
+    await fs.writeFile(metadataPath, JSON.stringify(nextMetadata, null, 2), 'utf-8')
+
+    return res.json({ ok: true })
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Nao foi possivel remover o quadro do cenário auxiliar.',
+      detail: error instanceof Error ? error.message : 'Erro desconhecido',
+    })
+  }
+})
+
+router.patch('/cenario/:ticketId/:scenarioId/:fileName', async (req, res) => {
+  try {
+    const safeTicketId = sanitizeTicketId(req.params.ticketId)
+    const safeScenarioId = sanitizeScenarioId(req.params.scenarioId)
+    const fileName = path.basename(req.params.fileName)
+    const framesDirectory = path.join(storageRoot, 'chamados', safeTicketId, 'cenarios', safeScenarioId, 'quadros')
+    const metadataPath = path.join(framesDirectory, 'metadata.json')
+    const metadata = await readMetadata(metadataPath)
+    const nextMetadata = metadata.map((entry) =>
+      entry.fileName === fileName
+        ? {
+            ...entry,
+            description: typeof req.body?.description === 'string' ? req.body.description : entry.description,
+            timestampLabel: typeof req.body?.timestampLabel === 'string' ? req.body.timestampLabel : entry.timestampLabel,
+          }
+        : entry,
+    )
+
+    await fs.writeFile(metadataPath, JSON.stringify(nextMetadata, null, 2), 'utf-8')
+
+    return res.json({ ok: true })
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Nao foi possivel atualizar os metadados do quadro do cenário auxiliar.',
       detail: error instanceof Error ? error.message : 'Erro desconhecido',
     })
   }

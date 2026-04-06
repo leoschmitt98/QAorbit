@@ -49,6 +49,18 @@ async function loadMetadata(ticketId) {
   }
 }
 
+async function loadScenarioMetadata(ticketId, scenarioId) {
+  const safeTicketId = sanitizeTicketId(ticketId)
+  const safeScenarioId = sanitizeTicketId(scenarioId)
+  const metadataPath = path.join(storageRoot, 'chamados', safeTicketId, 'cenarios', safeScenarioId, 'quadros', 'metadata.json')
+  try {
+    const content = await fs.readFile(metadataPath, 'utf-8')
+    return JSON.parse(content)
+  } catch {
+    return []
+  }
+}
+
 async function resolveCatalogNames(projectId, moduleId) {
   if (!projectId && !moduleId) {
     return { projectName: '-', moduleName: '-' }
@@ -338,6 +350,77 @@ router.get('/:ticketId/export-docx', async (req, res) => {
             spacing: { after: 220 },
           }),
         )
+      }
+    }
+
+    const complementaryScenarios = Array.isArray(workflow.scenarios) ? workflow.scenarios : []
+    const scenariosWithEvidence = complementaryScenarios.filter(
+      (scenario) =>
+        normalizeText(scenario.description) ||
+        normalizeText(scenario.expectedResult) ||
+        normalizeText(scenario.obtainedResult) ||
+        (Array.isArray(scenario.frames) && scenario.frames.length > 0),
+    )
+
+    if (scenariosWithEvidence.length > 0) {
+      docChildren.push(buildSectionSeparator())
+      docChildren.push(buildSectionTitle('Cenarios Auxiliares'))
+
+      for (let scenarioIndex = 0; scenarioIndex < scenariosWithEvidence.length; scenarioIndex += 1) {
+        const scenario = scenariosWithEvidence[scenarioIndex]
+        docChildren.push(
+          buildStepTitle(`CENARIO AUXILIAR ${scenarioIndex + 1}`, {
+            before: scenarioIndex === 0 ? 120 : 260,
+            after: 100,
+          }),
+        )
+        docChildren.push(...buildMultilineParagraphs(scenario.description || 'Sem descricao informada.'))
+        docChildren.push(...buildLabeledBlock('Resultado esperado', scenario.expectedResult || '-'))
+        docChildren.push(...buildLabeledBlock('Resultado obtido', scenario.obtainedResult || '-'))
+        docChildren.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: 'Status: ', bold: true, color: '1F2933' }),
+              new TextRun({ text: scenario.status || 'Parcial' }),
+            ],
+            spacing: { after: 120 },
+          }),
+        )
+
+        const scenarioMetadata = await loadScenarioMetadata(req.params.ticketId, scenario.id)
+        const orderedScenarioFrames = scenarioMetadata
+          .map((entry) => ({
+            ...entry,
+            filePath: path.join(storageRoot, 'chamados', safeTicketId, 'cenarios', sanitizeTicketId(scenario.id), 'quadros', entry.fileName),
+          }))
+          .filter((entry) => entry.fileName)
+
+        for (let frameIndex = 0; frameIndex < orderedScenarioFrames.length; frameIndex += 1) {
+          const frame = orderedScenarioFrames[frameIndex]
+          const imageBuffer = await fs.readFile(frame.filePath)
+          docChildren.push(buildStepTitle(`PASSO AUXILIAR ${frameIndex + 1}`, { before: 180, after: 120 }))
+          docChildren.push(
+            new Paragraph({
+              children: [
+                new ImageRun({
+                  data: imageBuffer,
+                  transformation: { width: 500, height: 282 },
+                }),
+              ],
+              alignment: AlignmentType.CENTER,
+              spacing: { after: frame.description ? 90 : 180 },
+            }),
+          )
+
+          if (frame.description) {
+            docChildren.push(
+              ...buildMultilineParagraphs(frame.description, {
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 180 },
+              }),
+            )
+          }
+        }
       }
     }
 

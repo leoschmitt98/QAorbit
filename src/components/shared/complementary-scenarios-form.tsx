@@ -1,9 +1,11 @@
 import type { ComplementaryScenario, Module, RetestStatus } from '@/types/domain'
 import { Card } from '@/components/ui/card'
+import { ScenarioEvidenceCapture } from '@/components/shared/scenario-evidence-capture'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { cn } from '@/utils/cn'
 
 interface ComplementaryScenariosFormProps {
+  ticketId: string
   scenarios: ComplementaryScenario[]
   modules: Module[]
   impactedModuleIds: string[]
@@ -14,6 +16,7 @@ interface ComplementaryScenariosFormProps {
 const statuses: RetestStatus[] = ['Aprovado', 'Reprovado', 'Parcial', 'Bloqueado']
 
 export function ComplementaryScenariosForm({
+  ticketId,
   scenarios,
   modules,
   impactedModuleIds,
@@ -29,15 +32,18 @@ export function ComplementaryScenariosForm({
   function addScenario() {
     onScenariosChange([
       ...scenarios,
-      {
-        id: `scn-${scenarios.length + 1}`,
-        description: '',
-        moduleId: modules[0]?.id ?? '',
-        expectedResult: '',
-        obtainedResult: '',
-        status: 'Parcial',
-      },
-    ])
+        {
+          id: `scn-${scenarios.length + 1}`,
+          description: '',
+          moduleId: modules[0]?.id ?? '',
+          expectedResult: '',
+          obtainedResult: '',
+          status: 'Parcial',
+          gifName: '',
+          gifPreviewUrl: '',
+          frames: [],
+        },
+      ])
   }
 
   function toggleImpactedModule(moduleId: string) {
@@ -126,6 +132,12 @@ export function ComplementaryScenariosForm({
                 />
               </label>
             </div>
+
+            <ScenarioEvidenceCapture
+              ticketId={ticketId}
+              scenario={scenario}
+              onChange={(nextScenario) => updateScenario(index, nextScenario)}
+            />
           </div>
         ))}
       </div>

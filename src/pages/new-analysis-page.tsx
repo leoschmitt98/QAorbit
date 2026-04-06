@@ -985,6 +985,7 @@ export function NewAnalysisPage() {
             {currentStep === 2 ? <RetestExecutionForm ticketId={ticket.ticketId} value={retest} onChange={setRetest} /> : null}
             {currentStep === 3 ? (
               <ComplementaryScenariosForm
+                ticketId={ticket.ticketId}
                 scenarios={scenarios}
                 modules={combinedModules}
                 impactedModuleIds={classification.impactedModuleIds}

@@ -23,6 +23,34 @@ function resolveStoredAssetUrl(ticketId, frame) {
   return `/storage/chamados/${encodeURIComponent(sanitizeSegment(ticketId))}/quadros/${encodeURIComponent(fileName)}`
 }
 
+async function mergeScenarioEvidenceFromLegacy(ticketId, draft) {
+  try {
+    const legacyDraft = await readLegacyWorkflow(ticketId)
+    const legacyScenarios = Array.isArray(legacyDraft?.scenarios) ? legacyDraft.scenarios : []
+
+    if (!Array.isArray(draft?.scenarios) || legacyScenarios.length === 0) {
+      return draft
+    }
+
+    return {
+      ...draft,
+      scenarios: draft.scenarios.map((scenario) => {
+        const legacyScenario = legacyScenarios.find((item) => item.id === scenario.id)
+        return legacyScenario
+          ? {
+              ...scenario,
+              gifName: legacyScenario.gifName || '',
+              gifPreviewUrl: legacyScenario.gifPreviewUrl || '',
+              frames: Array.isArray(legacyScenario.frames) ? legacyScenario.frames : [],
+            }
+          : scenario
+      }),
+    }
+  } catch {
+    return draft
+  }
+}
+
 async function resolveAreaIdByName(transaction, portalArea) {
   const areaName = normalizeString(portalArea)
   if (!areaName) return null
@@ -485,7 +513,7 @@ export async function loadWorkflowProgress(ticketId) {
     ticketId,
   )
 
-  if (draft) return draft
+  if (draft) return mergeScenarioEvidenceFromLegacy(ticketId, draft)
   return readLegacyWorkflow(ticketId)
 }
 
