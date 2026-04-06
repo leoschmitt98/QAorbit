@@ -727,7 +727,7 @@ export async function deleteWorkflowProgress(ticketId, auth) {
     cleanup.input('ticketId', sql.NVarChar(120), ticketId)
     await cleanup.query(`
       DELETE FROM dbo.HistoricoRelacionamentos
-      WHERE HistoricoId IN (SELECT HistoricoId FROM dbo.HistoricoTestes WHERE TicketId = @ticketId)
+      WHERE HistoricoOrigemId IN (SELECT HistoricoId FROM dbo.HistoricoTestes WHERE TicketId = @ticketId)
          OR HistoricoRelacionadoId IN (SELECT HistoricoId FROM dbo.HistoricoTestes WHERE TicketId = @ticketId);
 
       DELETE FROM dbo.HistoricoTesteModulosImpactados
