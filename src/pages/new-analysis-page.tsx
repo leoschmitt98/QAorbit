@@ -134,6 +134,7 @@ export function NewAnalysisPage() {
   const [activeAgentId, setActiveAgentId] = useState('')
   const [savedFlows, setSavedFlows] = useState<SavedFlowSummary[]>([])
   const [progressMessage, setProgressMessage] = useState('Nenhum salvamento executado nesta sessao.')
+  const [isSupportRailCollapsed, setIsSupportRailCollapsed] = useState(false)
   const [isSavingProgress, setIsSavingProgress] = useState(false)
   const [isLoadingProgress, setIsLoadingProgress] = useState(false)
   const [isExportingWord, setIsExportingWord] = useState(false)
@@ -923,6 +924,20 @@ export function NewAnalysisPage() {
       />
 
       <Card className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white/[0.02] px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Organizacao da tela</p>
+            <p className="text-sm text-muted">
+              Use o modo de foco para priorizar o preenchimento do chamado e abrir o painel lateral apenas quando precisar.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <GlowButton onClick={() => setIsSupportRailCollapsed((current) => !current)}>
+              {isSupportRailCollapsed ? 'Mostrar painel lateral' : 'Focar formulario'}
+            </GlowButton>
+          </div>
+        </div>
+
         <div className="grid gap-3 lg:grid-cols-6">
           {steps.map((step, index) => (
             <button
@@ -941,7 +956,13 @@ export function NewAnalysisPage() {
           ))}
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
+        <div
+          className={`grid gap-6 ${
+            isSupportRailCollapsed
+              ? 'grid-cols-1'
+              : 'xl:grid-cols-[minmax(0,1.45fr),minmax(320px,0.55fr)] 2xl:grid-cols-[minmax(0,1.35fr),minmax(360px,0.65fr)]'
+          }`}
+        >
           <div className="space-y-6">
             {currentStep === 0 ? (
               <TicketContextForm
@@ -1015,7 +1036,8 @@ export function NewAnalysisPage() {
             ) : null}
           </div>
 
-          <div className="space-y-6">
+          {!isSupportRailCollapsed ? (
+          <div className="space-y-6 xl:sticky xl:top-28 xl:self-start">
             <Card className="space-y-4">
               {activeAgent ? (
                 <div className="rounded-2xl border border-accent/25 bg-accent/8 p-4">
@@ -1297,6 +1319,7 @@ export function NewAnalysisPage() {
               />
             )}
           </div>
+          ) : null}
         </div>
 
         <div className="flex items-center justify-between">

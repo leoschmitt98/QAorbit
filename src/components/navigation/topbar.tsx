@@ -5,7 +5,12 @@ import { Input } from '@/components/ui/input'
 import { useProjectScope } from '@/hooks/use-project-scope'
 import { useCatalogProjectsQuery } from '@/services/catalog-api'
 
-export function Topbar() {
+interface TopbarProps {
+  collapsed?: boolean
+  onToggleSidebar?: () => void
+}
+
+export function Topbar({ collapsed = false, onToggleSidebar }: TopbarProps) {
   const { selectedProjectId, setSelectedProjectId } = useProjectScope()
   const projectsQuery = useCatalogProjectsQuery()
   const selectedProjectName =
@@ -38,6 +43,11 @@ export function Topbar() {
           </label>
         </div>
         <div className="flex items-center gap-3">
+          {onToggleSidebar ? (
+            <Button variant="secondary" onClick={onToggleSidebar} className="hidden lg:inline-flex">
+              {collapsed ? 'Expandir menu' : 'Menu compacto'}
+            </Button>
+          ) : null}
           {selectedProjectName ? (
             <div className="hidden rounded-2xl border border-accent/20 bg-accent/8 px-4 py-2 text-right xl:block">
               <p className="text-xs uppercase tracking-[0.16em] text-muted">Escopo atual</p>
