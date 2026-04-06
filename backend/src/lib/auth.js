@@ -155,6 +155,79 @@ export async function authenticateUser(email, password) {
   }
 }
 
+export async function listUsers() {
+  const pool = await getPool()
+  if (!pool) throw new Error('Gestao de usuarios requer banco configurado.')
+
+  const result = await createRequest(pool).query(`
+    SELECT UserId, Nome, Email, RoleName, Ativo, CreatedAt, UpdatedAt
+    FROM dbo.UsuariosQaOrbit
+    ORDER BY Nome
+  `)
+
+  return result.recordset.map((user) => ({
+    userId: user.UserId,
+    name: user.Nome,
+    email: user.Email,
+    role: user.RoleName,
+    active: Boolean(user.Ativo),
+    createdAt: user.CreatedAt ? new Date(user.CreatedAt).toISOString() : null,
+    updatedAt: user.UpdatedAt ? new Date(user.UpdatedAt).toISOString() : null,
+  }))
+}
+
+export async function createUserAccount(payload) {
+  const pool = await getPool()
+  if (!pool) throw new Error('Gestao de usuarios requer banco configurado.')
+
+  const name = String(payload?.name || '').trim()
+  const email = String(payload?.email || '').trim().toLowerCase()
+  const role = String(payload?.role || 'qa').trim().toLowerCase()
+  const password = String(payload?.password || '')
+
+  if (!name || !email || !password) {
+    throw new Error('Nome, email e senha sao obrigatorios.')
+  }
+
+  if (password.length < 8) {
+    throw new Error('A senha precisa ter pelo menos 8 caracteres.')
+  }
+
+  if (!['qa', 'lead', 'manager', 'admin'].includes(role)) {
+    throw new Error('Perfil invalido.')
+  }
+
+  const duplicateCheck = createRequest(pool)
+  duplicateCheck.input('email', sql.NVarChar(180), email)
+  const duplicateResult = await duplicateCheck.query(`
+    SELECT TOP 1 UserId
+    FROM dbo.UsuariosQaOrbit
+    WHERE Email = @email
+  `)
+  if (duplicateResult.recordset[0]) {
+    throw new Error('Ja existe um usuario com este email.')
+  }
+
+  const passwordData = hashPassword(password)
+  const request = createRequest(pool)
+  request.input('userId', sql.NVarChar(120), `user-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`)
+  request.input('nome', sql.NVarChar(180), name)
+  request.input('email', sql.NVarChar(180), email)
+  request.input('roleName', sql.NVarChar(40), role)
+  request.input('passwordHash', sql.NVarChar(255), passwordData.hash)
+  request.input('passwordSalt', sql.NVarChar(120), passwordData.salt)
+  await request.query(`
+    INSERT INTO dbo.UsuariosQaOrbit (UserId, Nome, Email, RoleName, PasswordHash, PasswordSalt)
+    VALUES (@userId, @nome, @email, @roleName, @passwordHash, @passwordSalt)
+  `)
+
+  return {
+    name,
+    email,
+    role,
+  }
+}
+
 export function attachSession(res, user) {
   const token = buildSessionToken(user)
   res.setHeader('Set-Cookie', sessionCookie(token))
