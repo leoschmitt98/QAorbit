@@ -73,3 +73,11 @@ export async function updateFlowLifecycleStatus(ticketId: string, lifecycleStatu
     response,
   )
 }
+
+export async function deleteFlowProgress(ticketId: string) {
+  const response = await fetch(`/api/chamados/${encodeURIComponent(ticketId)}`, {
+    method: 'DELETE',
+  })
+
+  return parseJson<{ ok: true }>(response)
+}

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import {
+  deleteWorkflowProgress,
   listWorkflowProgress,
   loadWorkflowProgress,
   saveWorkflowProgress,
@@ -58,6 +59,20 @@ router.patch('/:ticketId/status', async (req, res) => {
       message: error instanceof Error && error.message.includes('Acesso restrito')
         ? 'Este chamado pertence ao workspace de outro QA.'
         : 'Nao foi possivel atualizar o status operacional do chamado.',
+      detail: error instanceof Error ? error.message : 'Erro desconhecido',
+    })
+  }
+})
+
+router.delete('/:ticketId', async (req, res) => {
+  try {
+    const result = await deleteWorkflowProgress(req.params.ticketId, req.auth)
+    return res.json(result)
+  } catch (error) {
+    return res.status(error instanceof Error && error.message.includes('Acesso restrito') ? 403 : 500).json({
+      message: error instanceof Error && error.message.includes('Acesso restrito')
+        ? 'Este chamado pertence ao workspace de outro QA.'
+        : 'Nao foi possivel excluir o chamado.',
       detail: error instanceof Error ? error.message : 'Erro desconhecido',
     })
   }

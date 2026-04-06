@@ -1,7 +1,7 @@
 import { createRequest, getPool, sql } from '../db.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { readLegacyWorkflow, sanitizeSegment, storageRoot, writeLegacyWorkflow } from './legacy-storage.js'
+import { readLegacyWorkflow, sanitizeSegment, storageRoot, ticketDirectory, writeLegacyWorkflow } from './legacy-storage.js'
 import { canAccessOwnedRecord, resolveWorkspaceScope } from './auth.js'
 
 function toNullableInt(value) {
@@ -693,6 +693,112 @@ export async function updateWorkflowLifecycleStatus(ticketId, lifecycleStatus, a
   }
 
   return { ok: true, lifecycleStatus, finalizedAt, updatedAt }
+}
+
+export async function deleteWorkflowProgress(ticketId, auth) {
+  const pool = await getPool()
+
+  if (!pool) {
+    const legacy = await readLegacyWorkflow(ticketId)
+    if (auth && !canAccessOwnedRecord(auth, legacy?.createdByUserId)) {
+      throw new Error('Acesso restrito ao workspace deste QA.')
+    }
+    await fs.rm(ticketDirectory(ticketId), { recursive: true, force: true })
+    return { ok: true }
+  }
+
+  const ownershipCheck = createRequest(pool)
+  ownershipCheck.input('ticketId', sql.NVarChar(120), ticketId)
+  const ownershipResult = await ownershipCheck.query(`
+    SELECT TOP 1 CreatedByUserId
+    FROM dbo.Chamados
+    WHERE TicketId = @ticketId
+  `)
+  const existingOwnerUserId = ownershipResult.recordset[0]?.CreatedByUserId || ''
+  if (existingOwnerUserId && !canAccessOwnedRecord(auth, existingOwnerUserId)) {
+    throw new Error('Acesso restrito ao workspace deste QA.')
+  }
+
+  const transaction = new sql.Transaction(pool)
+  await transaction.begin()
+
+  try {
+    const cleanup = transaction.request()
+    cleanup.input('ticketId', sql.NVarChar(120), ticketId)
+    await cleanup.query(`
+      DELETE FROM dbo.HistoricoRelacionamentos
+      WHERE HistoricoId IN (SELECT HistoricoId FROM dbo.HistoricoTestes WHERE TicketId = @ticketId)
+         OR HistoricoRelacionadoId IN (SELECT HistoricoId FROM dbo.HistoricoTestes WHERE TicketId = @ticketId);
+
+      DELETE FROM dbo.HistoricoTesteModulosImpactados
+      WHERE HistoricoId IN (SELECT HistoricoId FROM dbo.HistoricoTestes WHERE TicketId = @ticketId);
+
+      DELETE FROM dbo.HistoricoTesteTags
+      WHERE HistoricoId IN (SELECT HistoricoId FROM dbo.HistoricoTestes WHERE TicketId = @ticketId);
+
+      DELETE FROM dbo.HistoricoTesteQuadros
+      WHERE HistoricoId IN (SELECT HistoricoId FROM dbo.HistoricoTestes WHERE TicketId = @ticketId);
+
+      DELETE FROM dbo.HistoricoTestes
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.BugPromptsIA
+      WHERE BugId IN (SELECT BugId FROM dbo.Bugs WHERE TicketId = @ticketId);
+
+      DELETE FROM dbo.BugPassosReproducao
+      WHERE BugId IN (SELECT BugId FROM dbo.Bugs WHERE TicketId = @ticketId);
+
+      DELETE FROM dbo.BugQuadros
+      WHERE BugId IN (SELECT BugId FROM dbo.Bugs WHERE TicketId = @ticketId);
+
+      DELETE FROM dbo.Bugs
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.ChamadoPromptsIA
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.ChamadoRetestePassoQuadros
+      WHERE PassoId IN (SELECT PassoId FROM dbo.ChamadoRetestePassos WHERE TicketId = @ticketId);
+
+      DELETE FROM dbo.ChamadoRetestePassos
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.ChamadoRetesteQuadros
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.ChamadoRetestes
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.ChamadoCenariosComplementares
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.ChamadoClassificacaoModulosImpactados
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.ChamadoClassificacoes
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.ChamadoDocumentosSelecionadosPrompt
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.ChamadoProblemas
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.ChamadoAnexosSuporte
+      WHERE TicketId = @ticketId;
+
+      DELETE FROM dbo.Chamados
+      WHERE TicketId = @ticketId;
+    `)
+
+    await transaction.commit()
+  } catch (error) {
+    await transaction.rollback()
+    throw error
+  }
+
+  await fs.rm(ticketDirectory(ticketId), { recursive: true, force: true }).catch(() => undefined)
+  return { ok: true }
 }
 
 async function listLegacyWorkflowProgress(auth) {

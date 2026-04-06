@@ -18,7 +18,7 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { listCatalogModules, useCatalogAreasQuery, useCatalogModulesQuery, useCatalogProjectsQuery } from '@/services/catalog-api'
 import { downloadEvidenceDocx } from '@/services/evidence-export-api'
-import { listSavedFlows, loadFlowProgress, saveFlowProgress, updateFlowLifecycleStatus } from '@/services/flow-progress-api'
+import { deleteFlowProgress, listSavedFlows, loadFlowProgress, saveFlowProgress, updateFlowLifecycleStatus } from '@/services/flow-progress-api'
 import { useFunctionalDocumentsQuery } from '@/services/functional-docs-api'
 import { listRelatedHistoricalTests, saveHistoricalTest } from '@/services/historical-tests-api'
 import { importPsrDocument } from '@/services/psr-import'
@@ -142,6 +142,7 @@ export function NewAnalysisPage() {
   const [isExportingWord, setIsExportingWord] = useState(false)
   const [isUpdatingLifecycle, setIsUpdatingLifecycle] = useState(false)
   const [isOpeningBug, setIsOpeningBug] = useState(false)
+  const [isDeletingProgress, setIsDeletingProgress] = useState(false)
   const [isSavingHistory, setIsSavingHistory] = useState(false)
   const [documentImportMessage, setDocumentImportMessage] = useState('Upload de PSR pode preencher automaticamente o cabecalho do chamado.')
   const [clipboardImportMessage, setClipboardImportMessage] = useState(
@@ -455,6 +456,41 @@ export function NewAnalysisPage() {
       )
     } finally {
       setIsOpeningBug(false)
+    }
+  }
+
+  async function handleDeleteProgress(ticketIdToDelete?: string) {
+    const resolvedTicketId = (ticketIdToDelete || ticket.ticketId || '').trim()
+    if (!resolvedTicketId) {
+      setProgressMessage('Informe o ID do chamado antes de excluir.')
+      return
+    }
+
+    if (!window.confirm(`Deseja excluir o chamado ${resolvedTicketId} do workspace? Esta acao remove progresso, bug vinculado e historico associado.`)) {
+      return
+    }
+
+    setIsDeletingProgress(true)
+    try {
+      await deleteFlowProgress(resolvedTicketId)
+      if (ticket.ticketId.trim() === resolvedTicketId) {
+        setCurrentStep(0)
+        setTicket(emptyTicket)
+        setProblem(emptyProblem)
+        setRetest(emptyRetest)
+        setScenarios([])
+        setClassification(emptyClassification)
+        setHistoryMetadata(emptyHistoryMetadata)
+        setAiResponse('')
+        setHistoryRecordIds([])
+        setSelectedFunctionalDocumentIds([])
+      }
+      setProgressMessage(`Chamado ${resolvedTicketId} excluido do workspace.`)
+      await refreshSavedFlows()
+    } catch (error) {
+      setProgressMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir o chamado.')
+    } finally {
+      setIsDeletingProgress(false)
     }
   }
 
@@ -1076,6 +1112,9 @@ export function NewAnalysisPage() {
                 <GlowButton onClick={() => void handleOpenLinkedBug()} disabled={isOpeningBug || !ticket.ticketId.trim()}>
                   {isOpeningBug ? 'Abrindo bug...' : 'Vincular bug'}
                 </GlowButton>
+                <GlowButton onClick={() => void handleDeleteProgress()} disabled={isDeletingProgress || !ticket.ticketId.trim()}>
+                  {isDeletingProgress ? 'Excluindo...' : 'Excluir chamado'}
+                </GlowButton>
               </div>
               <div className="rounded-2xl border border-border bg-white/[0.02] p-4 text-sm text-muted">
                 {progressMessage}
@@ -1085,9 +1124,8 @@ export function NewAnalysisPage() {
                 <div className="space-y-2">
                   {savedFlows.length > 0 ? (
                     savedFlows.slice(0, 6).map((flow) => (
-                      <button
+                      <div
                         key={flow.ticketId}
-                        type="button"
                         onClick={() => void handleLoadProgress(flow.ticketId)}
                         className="flex w-full items-center justify-between rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-left text-sm transition hover:border-accent/20"
                       >
@@ -1096,12 +1134,24 @@ export function NewAnalysisPage() {
                           <p className="text-muted">{flow.title}</p>
                           {flow.ownerName ? <p className="text-xs uppercase tracking-[0.16em] text-muted">QA: {flow.ownerName}</p> : null}
                         </div>
-                        <div className="text-right text-xs text-muted">
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              void handleDeleteProgress(flow.ticketId)
+                            }}
+                            className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-foreground transition hover:border-red-400/40 hover:text-red-200"
+                          >
+                            Excluir
+                          </button>
+                          <div className="text-right text-xs text-muted">
                           <p>Status do chamado: {flow.lifecycleStatus}</p>
                           <p>Resultado do reteste: {flow.status}</p>
                           <p>{new Date(flow.updatedAt).toLocaleString('pt-BR')}</p>
+                          </div>
                         </div>
-                      </button>
+                      </div>
                     ))
                   ) : (
                     <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { LoadingState } from '@/components/shared/loading-state'
 import { Card } from '@/components/ui/card'
@@ -7,13 +7,14 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { useProjectScope } from '@/hooks/use-project-scope'
 import { useWorkspaceScope } from '@/hooks/use-workspace-scope'
 import { useCatalogModulesQuery, useCatalogProjectsQuery } from '@/services/catalog-api'
-import { listSavedFlows } from '@/services/flow-progress-api'
+import { deleteFlowProgress, listSavedFlows } from '@/services/flow-progress-api'
 import type { SavedFlowSummary } from '@/types/domain'
 import { formatDate } from '@/utils/format'
 
 export function FlowHistoryPage() {
   const { selectedProjectId } = useProjectScope()
   const { visibility } = useWorkspaceScope()
+  const queryClient = useQueryClient()
   const flowsQuery = useQuery({
     queryKey: ['saved-flow-history', visibility],
     queryFn: () => listSavedFlows(visibility),
@@ -30,6 +31,17 @@ export function FlowHistoryPage() {
   }
 
   if (flowsQuery.isLoading || projectsQuery.isLoading) return <LoadingState />
+
+  async function handleDelete(ticketId: string) {
+    if (!window.confirm(`Deseja excluir o chamado ${ticketId} do workspace? Esta acao remove progresso, bug vinculado e historico associado.`)) {
+      return
+    }
+
+    await deleteFlowProgress(ticketId)
+    await queryClient.invalidateQueries({ queryKey: ['saved-flow-history'] })
+    await queryClient.invalidateQueries({ queryKey: ['dashboard-saved-flows'] })
+    await queryClient.invalidateQueries({ queryKey: ['saved-flows-agents'] })
+  }
 
   return (
     <div className="space-y-6">
@@ -54,6 +66,7 @@ export function FlowHistoryPage() {
         description="Chamados que ainda estao em validacao e podem ser retomados a qualquer momento."
         flows={grouped.andamento}
         projectOptions={projectOptions}
+        onDelete={handleDelete}
       />
 
       <FlowSection
@@ -61,6 +74,7 @@ export function FlowHistoryPage() {
         description="Chamados concluidos que permanecem disponiveis para consulta, reabertura ou reaproveitamento."
         flows={grouped.finalizados}
         projectOptions={projectOptions}
+        onDelete={handleDelete}
       />
     </div>
   )
@@ -71,11 +85,13 @@ function FlowSection({
   description,
   flows,
   projectOptions,
+  onDelete,
 }: {
   title: string
   description: string
   flows: SavedFlowSummary[]
   projectOptions: Array<{ id: string; nome: string }>
+  onDelete: (ticketId: string) => Promise<void>
 }) {
   return (
     <section className="space-y-4">
@@ -87,7 +103,7 @@ function FlowSection({
       {flows.length > 0 ? (
         <div className="grid gap-4">
           {flows.map((flow) => (
-            <FlowCard key={flow.ticketId} flow={flow} projectOptions={projectOptions} />
+            <FlowCard key={flow.ticketId} flow={flow} projectOptions={projectOptions} onDelete={onDelete} />
           ))}
         </div>
       ) : (
@@ -103,9 +119,11 @@ function FlowSection({
 function FlowCard({
   flow,
   projectOptions,
+  onDelete,
 }: {
   flow: SavedFlowSummary
   projectOptions: Array<{ id: string; nome: string }>
+  onDelete: (ticketId: string) => Promise<void>
 }) {
   const projectName = projectOptions.find((item) => item.id === flow.projectId)?.nome ?? (flow.projectId || '-')
   const moduleQuery = useCatalogModulesQuery(flow.projectId)
@@ -167,6 +185,13 @@ function FlowCard({
           >
             Abrir bug vinculado
           </Link>
+          <button
+            type="button"
+            onClick={() => void onDelete(flow.ticketId)}
+            className="inline-flex h-11 items-center justify-center rounded-2xl border border-border bg-white/[0.02] px-4 text-sm font-semibold text-foreground transition hover:border-red-400/40 hover:text-red-200"
+          >
+            Excluir chamado
+          </button>
         </div>
       </div>
     </Card>
