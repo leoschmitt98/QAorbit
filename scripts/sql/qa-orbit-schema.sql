@@ -46,6 +46,7 @@ BEGIN
     Id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     Nome NVARCHAR(200) NOT NULL,
     ProjetoId INT NOT NULL,
+    PortalId INT NULL,
     Ativo BIT NOT NULL CONSTRAINT DF_Modulos_Ativo DEFAULT (1),
     DataCriacao DATETIME2(0) NOT NULL CONSTRAINT DF_Modulos_DataCriacao DEFAULT (SYSDATETIME()),
     DataAtualizacao DATETIME2(0) NOT NULL CONSTRAINT DF_Modulos_DataAtualizacao DEFAULT (SYSDATETIME()),
@@ -54,6 +55,47 @@ BEGIN
 
   CREATE UNIQUE INDEX UX_Modulos_Projeto_Nome ON dbo.Modulos (ProjetoId, Nome);
   CREATE INDEX IX_Modulos_ProjetoId ON dbo.Modulos (ProjetoId);
+END
+GO
+
+IF OBJECT_ID('dbo.ProjetoPortais', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.ProjetoPortais (
+    Id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    ProjetoId INT NOT NULL,
+    Nome NVARCHAR(200) NOT NULL,
+    Ativo BIT NOT NULL CONSTRAINT DF_ProjetoPortais_Ativo DEFAULT (1),
+    DataCriacao DATETIME2(0) NOT NULL CONSTRAINT DF_ProjetoPortais_DataCriacao DEFAULT (SYSDATETIME()),
+    DataAtualizacao DATETIME2(0) NOT NULL CONSTRAINT DF_ProjetoPortais_DataAtualizacao DEFAULT (SYSDATETIME()),
+    CONSTRAINT FK_ProjetoPortais_Projetos FOREIGN KEY (ProjetoId) REFERENCES dbo.Projetos (Id)
+  );
+
+  CREATE UNIQUE INDEX UX_ProjetoPortais_Projeto_Nome ON dbo.ProjetoPortais (ProjetoId, Nome);
+  CREATE INDEX IX_ProjetoPortais_ProjetoId ON dbo.ProjetoPortais (ProjetoId);
+END
+GO
+
+IF COL_LENGTH('dbo.Modulos', 'PortalId') IS NULL
+BEGIN
+  ALTER TABLE dbo.Modulos ADD PortalId INT NULL;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Modulos_ProjetoPortais')
+BEGIN
+  ALTER TABLE dbo.Modulos
+  ADD CONSTRAINT FK_Modulos_ProjetoPortais FOREIGN KEY (PortalId) REFERENCES dbo.ProjetoPortais (Id);
+END
+GO
+
+IF NOT EXISTS (
+  SELECT 1
+  FROM sys.indexes
+  WHERE name = 'IX_Modulos_PortalId'
+    AND object_id = OBJECT_ID('dbo.Modulos')
+)
+BEGIN
+  CREATE INDEX IX_Modulos_PortalId ON dbo.Modulos (PortalId);
 END
 GO
 

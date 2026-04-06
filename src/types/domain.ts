@@ -30,6 +30,8 @@ export interface DocumentItem {
   type: 'Caso de uso' | 'Regra de negocio' | 'Documento funcional' | 'Criterio de aceite' | 'Fluxo conhecido'
   projectId: string
   projectName?: string
+  portalId?: string
+  portalName?: string
   moduleId: string
   moduleName?: string
   version: string

@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const storageRoot = path.resolve(__dirname, '../../../storage')
 const baseDirectory = path.join(storageRoot, 'documentos-funcionais')
 const metadataPath = path.join(baseDirectory, 'records.json')
+let schemaReadyPromise
 
 function sanitizeSegment(value) {
   return String(value || 'sem-valor').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
@@ -63,8 +64,43 @@ function buildDownloadUrl(record) {
   return `/storage/documentos-funcionais/${encodeURIComponent(record.projectId)}/${encodeURIComponent(record.moduleId)}/${encodeURIComponent(record.storedFileName)}`
 }
 
+function ensureDocumentScopesSchema() {
+  if (!schemaReadyPromise) {
+    schemaReadyPromise = (async () => {
+      const pool = await getPool()
+      if (!pool) return
+
+      await pool.request().query(`
+        IF OBJECT_ID('dbo.ProjetoPortais', 'U') IS NULL
+        BEGIN
+          CREATE TABLE dbo.ProjetoPortais (
+            Id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            ProjetoId INT NOT NULL,
+            Nome NVARCHAR(200) NOT NULL,
+            Ativo BIT NOT NULL CONSTRAINT DF_ProjetoPortais_Ativo DEFAULT (1),
+            DataCriacao DATETIME2(0) NOT NULL CONSTRAINT DF_ProjetoPortais_DataCriacao DEFAULT (SYSDATETIME()),
+            DataAtualizacao DATETIME2(0) NOT NULL CONSTRAINT DF_ProjetoPortais_DataAtualizacao DEFAULT (SYSDATETIME()),
+            CONSTRAINT FK_ProjetoPortais_Projetos FOREIGN KEY (ProjetoId) REFERENCES dbo.Projetos (Id)
+          );
+        END;
+
+        IF COL_LENGTH('dbo.Modulos', 'PortalId') IS NULL
+        BEGIN
+          ALTER TABLE dbo.Modulos ADD PortalId INT NULL;
+        END;
+      `)
+    })().catch((error) => {
+      schemaReadyPromise = null
+      throw error
+    })
+  }
+
+  return schemaReadyPromise
+}
+
 router.get('/', async (req, res) => {
   try {
+    await ensureDocumentScopesSchema()
     const projectId = String(req.query.projectId || '').trim()
     const moduleId = String(req.query.moduleId || '').trim()
     const search = String(req.query.search || '').trim().toLowerCase()
@@ -75,7 +111,17 @@ router.get('/', async (req, res) => {
         ? (
             await (() => {
               const request = createRequest(pool)
-              return request.query('SELECT * FROM dbo.DocumentosFuncionais WHERE Ativo = 1 ORDER BY DataAtualizacao DESC')
+              return request.query(`
+                SELECT
+                  df.*,
+                  m.PortalId AS PortalId,
+                  pp.Nome AS PortalNome
+                FROM dbo.DocumentosFuncionais df
+                LEFT JOIN dbo.Modulos m ON m.Id = df.ModuloId
+                LEFT JOIN dbo.ProjetoPortais pp ON pp.Id = m.PortalId
+                WHERE df.Ativo = 1
+                ORDER BY df.DataAtualizacao DESC
+              `)
             })()
           ).recordset.map((row) =>
             normalizeRecord({
@@ -83,6 +129,8 @@ router.get('/', async (req, res) => {
               projectId: row.ProjetoId ? String(row.ProjetoId) : '',
               projectName: '',
               moduleId: row.ModuloId ? String(row.ModuloId) : '',
+              portalId: row.PortalId ? String(row.PortalId) : '',
+              portalName: row.PortalNome || '',
               moduleName: '',
               title: row.Titulo,
               type: row.TipoDocumento,
@@ -129,18 +177,30 @@ router.get('/', async (req, res) => {
 
 router.get('/:documentId', async (req, res) => {
   try {
+    await ensureDocumentScopesSchema()
     const pool = await getPool()
     const records = pool
       ? (
           await (() => {
             const request = createRequest(pool)
             request.input('documentoId', sql.NVarChar(80), req.params.documentId)
-            return request.query('SELECT * FROM dbo.DocumentosFuncionais WHERE DocumentoId = @documentoId')
+            return request.query(`
+              SELECT
+                df.*,
+                m.PortalId AS PortalId,
+                pp.Nome AS PortalNome
+              FROM dbo.DocumentosFuncionais df
+              LEFT JOIN dbo.Modulos m ON m.Id = df.ModuloId
+              LEFT JOIN dbo.ProjetoPortais pp ON pp.Id = m.PortalId
+              WHERE df.DocumentoId = @documentoId
+            `)
           })()
         ).recordset.map((row) =>
           normalizeRecord({
             id: row.DocumentoId,
             projectId: row.ProjetoId ? String(row.ProjetoId) : '',
+            portalId: row.PortalId ? String(row.PortalId) : '',
+            portalName: row.PortalNome || '',
             moduleId: row.ModuloId ? String(row.ModuloId) : '',
             title: row.Titulo,
             type: row.TipoDocumento,
@@ -190,6 +250,7 @@ router.post('/', async (req, res) => {
   }
 
   try {
+    await ensureDocumentScopesSchema()
     const id = `doc-${Date.now()}`
     const safeProjectId = sanitizeSegment(projectId)
     const safeModuleId = sanitizeSegment(moduleId)

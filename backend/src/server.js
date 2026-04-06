@@ -10,6 +10,7 @@ import documentosFuncionaisRouter from './routes/documentos-funcionais.js'
 import evidenciasRouter from './routes/evidencias.js'
 import historicoTestesRouter from './routes/historico-testes.js'
 import modulosRouter from './routes/modulos.js'
+import projetoPortaisRouter from './routes/projeto-portais.js'
 import projetosRouter from './routes/projetos.js'
 import quadrosRouter from './routes/quadros.js'
 import { closePool } from './db.js'
@@ -32,6 +33,7 @@ app.use('/storage', requireAuth, express.static(storageRoot))
 app.use('/api', requireAuth)
 
 app.use('/api/projetos', projetosRouter)
+app.use('/api/projeto-portais', projetoPortaisRouter)
 app.use('/api/modulos', modulosRouter)
 app.use('/api/areas', areasRouter)
 app.use('/api/chamados', chamadosRouter)

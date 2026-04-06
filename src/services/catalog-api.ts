@@ -7,6 +7,12 @@ export interface CatalogOption {
 
 export interface CatalogModulo extends CatalogOption {
   projetoId: string
+  portalId?: string
+  portalNome?: string
+}
+
+export interface CatalogProjectPortal extends CatalogOption {
+  projetoId: string
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -41,11 +47,23 @@ export function useCatalogModulesQuery(projectId?: string) {
   })
 }
 
+export function useCatalogProjectPortalsQuery(projectId?: string) {
+  return useQuery({
+    queryKey: ['catalog-project-portals', projectId],
+    queryFn: () => listCatalogProjectPortals(projectId || ''),
+    enabled: Boolean(projectId),
+  })
+}
+
 export function listCatalogModules(projectId: string) {
   return fetchJson<CatalogModulo[]>(`/api/modulos?projetoId=${projectId}`)
 }
 
-export async function createCatalogModule(payload: { projetoId: string; nome: string }) {
+export function listCatalogProjectPortals(projectId: string) {
+  return fetchJson<CatalogProjectPortal[]>(`/api/projeto-portais?projetoId=${projectId}`)
+}
+
+export async function createCatalogModule(payload: { projetoId: string; nome: string; portalId?: string }) {
   const response = await fetch('/api/modulos', {
     method: 'POST',
     headers: {
@@ -60,4 +78,21 @@ export async function createCatalogModule(payload: { projetoId: string; nome: st
   }
 
   return response.json() as Promise<CatalogModulo>
+}
+
+export async function createCatalogProjectPortal(payload: { projetoId: string; nome: string }) {
+  const response = await fetch('/api/projeto-portais', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null)
+    throw new Error(errorBody?.message || 'Nao foi possivel cadastrar o portal do projeto.')
+  }
+
+  return response.json() as Promise<CatalogProjectPortal>
 }
