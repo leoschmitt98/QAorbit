@@ -76,6 +76,10 @@ const annotationTools: Array<{ type: FrameAnnotationType; label: string; icon: t
   { type: 'click', label: 'Clique', icon: MousePointerClick },
 ]
 
+function getFrameSource(frame: Pick<RetestFrame, 'downloadUrl' | 'imageUrl'>) {
+  return frame.downloadUrl || frame.imageUrl || ''
+}
+
 export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecutionFormProps) {
   const [selectedFrameId, setSelectedFrameId] = useState<string>(value.frames[0]?.id ?? '')
   const [activeTool, setActiveTool] = useState<FrameAnnotationType>('circle')
@@ -695,7 +699,7 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
                 )}
               >
                 <button type="button" onClick={() => setSelectedFrameId(frame.id)} className="block w-full text-left">
-                  <img src={frame.imageUrl} alt={frame.name} className="h-32 w-full object-cover" />
+                  <img src={getFrameSource(frame)} alt={frame.name} className="h-32 w-full object-cover" />
                   <div className="space-y-1 px-4 py-3">
                     <p className="font-semibold text-foreground">
                       Quadro {index + 1} - {frame.timestampLabel}
@@ -762,7 +766,7 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
           >
             {selectedFrame ? (
               <>
-                <img src={selectedFrame.imageUrl} alt={selectedFrame.name} className="h-[340px] w-full object-contain" />
+                <img src={getFrameSource(selectedFrame)} alt={selectedFrame.name} className="h-[340px] w-full object-contain" />
                 {selectedFrame.annotations.map((annotation) => (
                   <div key={annotation.id}>{renderAnnotation(annotation)}</div>
                 ))}
@@ -868,7 +872,7 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
                       const frameIndex = value.frames.findIndex((item) => item.id === frame.id)
                       return (
                         <div key={frame.id} className="relative w-40 overflow-hidden rounded-2xl border border-accent/25 bg-black/20">
-                          <img src={frame.imageUrl} alt={frame.name} className="h-24 w-full object-cover" />
+                          <img src={getFrameSource(frame)} alt={frame.name} className="h-24 w-full object-cover" />
                           <div className="space-y-1 bg-background/90 px-3 py-2 text-xs text-foreground">
                             <p>Quadro {frameIndex + 1}</p>
                             {frame.description?.trim() ? (

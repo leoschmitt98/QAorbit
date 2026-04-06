@@ -61,6 +61,10 @@ const annotationTools: Array<{ type: FrameAnnotationType; label: string; icon: t
   { type: 'click', label: 'Clique', icon: MousePointerClick },
 ]
 
+function getFrameSource(frame: Pick<RetestFrame, 'downloadUrl' | 'imageUrl'>) {
+  return frame.downloadUrl || frame.imageUrl || ''
+}
+
 export function BugEvidenceCapture({ ticketId, bugId, value, onChange }: BugEvidenceCaptureProps) {
   const [selectedFrameId, setSelectedFrameId] = useState<string>(value.frames[0]?.id ?? '')
   const [activeTool, setActiveTool] = useState<FrameAnnotationType>('circle')
@@ -492,7 +496,7 @@ export function BugEvidenceCapture({ ticketId, bugId, value, onChange }: BugEvid
                   )}
                 >
                   <button type="button" onClick={() => setSelectedFrameId(frame.id)} className="block w-full text-left">
-                    <img src={frame.imageUrl} alt={frame.name} className="h-32 w-full object-cover" />
+                    <img src={getFrameSource(frame)} alt={frame.name} className="h-32 w-full object-cover" />
                     <div className="space-y-1 px-4 py-3">
                       <p className="font-semibold text-foreground">Quadro {index + 1}</p>
                       {frame.description?.trim() ? <p className="line-clamp-2 text-sm leading-6 text-muted">{frame.description}</p> : null}
@@ -545,7 +549,7 @@ export function BugEvidenceCapture({ ticketId, bugId, value, onChange }: BugEvid
             <div className="relative min-h-[340px] overflow-hidden rounded-3xl border border-border bg-black/30" onClick={handleFrameCanvasClick}>
               {selectedFrame ? (
                 <>
-                  <img src={selectedFrame.imageUrl} alt={selectedFrame.name} className="h-[340px] w-full object-contain" />
+                  <img src={getFrameSource(selectedFrame)} alt={selectedFrame.name} className="h-[340px] w-full object-contain" />
                   {selectedFrame.annotations.map((annotation) => (
                     <div key={annotation.id}>{renderAnnotation(annotation)}</div>
                   ))}

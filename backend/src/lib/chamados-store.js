@@ -1,7 +1,7 @@
 import { createRequest, getPool, sql } from '../db.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { readLegacyWorkflow, storageRoot, writeLegacyWorkflow } from './legacy-storage.js'
+import { readLegacyWorkflow, sanitizeSegment, storageRoot, writeLegacyWorkflow } from './legacy-storage.js'
 
 function toNullableInt(value) {
   const numeric = Number(value)
@@ -11,6 +11,16 @@ function toNullableInt(value) {
 function normalizeString(value) {
   const normalized = String(value ?? '').trim()
   return normalized || ''
+}
+
+function resolveStoredAssetUrl(ticketId, frame) {
+  const directUrl = normalizeString(frame?.DownloadUrl || frame?.downloadUrl || frame?.imageUrl)
+  if (directUrl) return directUrl
+
+  const fileName = normalizeString(frame?.FileName || frame?.fileName)
+  if (!fileName) return ''
+
+  return `/storage/chamados/${encodeURIComponent(sanitizeSegment(ticketId))}/quadros/${encodeURIComponent(fileName)}`
 }
 
 async function resolveAreaIdByName(transaction, portalArea) {
@@ -341,11 +351,11 @@ function mapWorkflowFromRecordsets(recordsets, ticketId) {
   const frames = (recordsets.frames ?? []).map((frame) => ({
     id: frame.QuadroId,
     name: frame.Nome,
-    imageUrl: frame.DownloadUrl || '',
+    imageUrl: resolveStoredAssetUrl(ticketId, frame),
     timestampLabel: frame.TimestampLabel || '00:00',
     description: frame.Descricao || '',
     fileName: frame.FileName || undefined,
-    downloadUrl: frame.DownloadUrl || undefined,
+    downloadUrl: resolveStoredAssetUrl(ticketId, frame) || undefined,
     persistedAt: frame.PersistedAt ? new Date(frame.PersistedAt).toISOString() : undefined,
     annotations: frame.AnnotationsJson ? JSON.parse(frame.AnnotationsJson) : [],
     editHistory: frame.EditHistoryJson ? JSON.parse(frame.EditHistoryJson) : [],
