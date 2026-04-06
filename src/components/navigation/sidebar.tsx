@@ -31,8 +31,9 @@ interface SidebarProps {
 export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
   return (
     <aside
+      translate="no"
       className={cn(
-        'w-full border-b border-border bg-black/35 px-4 py-4 backdrop-blur-xl lg:min-h-screen lg:border-b-0 lg:border-r',
+        'notranslate w-full border-b border-border bg-black/35 px-4 py-4 backdrop-blur-xl lg:min-h-screen lg:border-b-0 lg:border-r',
         collapsed ? 'lg:w-24' : 'lg:w-72',
       )}
     >
@@ -66,7 +67,6 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
           <NavLink
             key={to}
             to={to}
-            title={label}
             className={({ isActive }) =>
               cn(
                 'flex items-center rounded-2xl px-4 py-3 text-sm font-medium text-muted transition hover:bg-white/[0.04] hover:text-foreground',
@@ -74,9 +74,10 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
                 isActive && 'border border-accent/30 bg-accent/12 text-foreground shadow-glow',
               )
             }
+            aria-label={label}
           >
             <Icon className="h-4 w-4" />
-            {!collapsed ? label : null}
+            <span className={cn(collapsed ? 'sr-only' : 'inline')}>{label}</span>
           </NavLink>
         ))}
       </nav>

@@ -23,7 +23,7 @@ export function Topbar({ collapsed = false, onToggleSidebar, userName = 'Usuario
     projectsQuery.data?.find((project) => project.id === selectedProjectId)?.nome ?? ''
 
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-background/80 px-4 py-4 backdrop-blur-xl lg:px-8">
+    <header translate="no" className="notranslate sticky top-0 z-20 border-b border-border bg-background/80 px-4 py-4 backdrop-blur-xl lg:px-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex w-full max-w-4xl flex-col gap-3 xl:flex-row xl:items-center">
           <div className="relative w-full max-w-xl">

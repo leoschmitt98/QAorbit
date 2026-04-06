@@ -22,7 +22,7 @@ export function AppShell() {
   return (
     <WorkspaceScopeProvider>
       <ProjectScopeProvider>
-        <div className="min-h-screen bg-background bg-glow text-foreground">
+        <div className="min-h-screen bg-background bg-glow text-foreground notranslate" translate="no">
           <div className="lg:flex">
             <Sidebar collapsed={isSidebarCollapsed} onToggle={() => setIsSidebarCollapsed((current) => !current)} />
             <div className="min-w-0 flex-1">
