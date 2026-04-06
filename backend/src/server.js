@@ -3,6 +3,7 @@ import express from 'express'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import areasRouter from './routes/areas.js'
+import authRouter from './routes/auth.js'
 import bugsRouter from './routes/bugs.js'
 import chamadosRouter from './routes/chamados.js'
 import documentosFuncionaisRouter from './routes/documentos-funcionais.js'
@@ -12,18 +13,23 @@ import modulosRouter from './routes/modulos.js'
 import projetosRouter from './routes/projetos.js'
 import quadrosRouter from './routes/quadros.js'
 import { closePool } from './db.js'
+import { ensureAuthSchemaAndBootstrap, requireAuth } from './lib/auth.js'
 
 const app = express()
 const port = Number(process.env.API_PORT || 3001)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const storageRoot = path.resolve(__dirname, '../../storage')
 
+app.set('trust proxy', 1)
 app.use(express.json({ limit: '50mb' }))
-app.use('/storage', express.static(storageRoot))
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
+
+app.use('/api/auth', authRouter)
+app.use('/storage', requireAuth, express.static(storageRoot))
+app.use('/api', requireAuth)
 
 app.use('/api/projetos', projetosRouter)
 app.use('/api/modulos', modulosRouter)
@@ -35,9 +41,16 @@ app.use('/api/evidencias', evidenciasRouter)
 app.use('/api/historico-testes', historicoTestesRouter)
 app.use('/api/quadros', quadrosRouter)
 
-app.listen(port, () => {
-  console.log(`QA Orbit backend online at http://localhost:${port}`)
-})
+ensureAuthSchemaAndBootstrap()
+  .then(() => {
+    app.listen(port, () => {
+      console.log(`QA Orbit backend online at http://localhost:${port}`)
+    })
+  })
+  .catch((error) => {
+    console.error('Falha ao iniciar autenticacao do QA Orbit:', error)
+    process.exit(1)
+  })
 
 async function shutdown() {
   await closePool()

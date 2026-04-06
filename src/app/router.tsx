@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import { AppShell } from '@/layouts/app-shell'
+import { useAuth } from '@/hooks/use-auth'
 import { BugDetailPage } from '@/pages/bug-detail-page'
 import { BugsPage } from '@/pages/bugs-page'
 import { CentralAgentsPage } from '@/pages/central-agents-page'
@@ -17,11 +18,30 @@ import { ProjectDetailPage } from '@/pages/project-detail-page'
 import { ProjectsPage } from '@/pages/projects-page'
 import { ReportsPage } from '@/pages/reports-page'
 import { SettingsPage } from '@/pages/settings-page'
+import { LoginPage } from '@/pages/login-page'
+
+function ProtectedApp() {
+  const { isAuthenticated, isLoading } = useAuth()
+
+  if (isLoading) {
+    return <div className="min-h-screen bg-background bg-glow" />
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+
+  return <AppShell />
+}
 
 const router = createBrowserRouter([
   {
+    path: '/login',
+    element: <LoginPage />,
+  },
+  {
     path: '/',
-    element: <AppShell />,
+    element: <ProtectedApp />,
     children: [
       { index: true, element: <DashboardPage /> },
       { path: 'agents', element: <CentralAgentsPage /> },
