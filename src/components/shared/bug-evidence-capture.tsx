@@ -62,6 +62,10 @@ const annotationTools: Array<{ type: FrameAnnotationType; label: string; icon: t
 ]
 
 function getFrameSource(frame: Pick<RetestFrame, 'downloadUrl' | 'imageUrl'>) {
+  if (frame.imageUrl?.startsWith('data:')) {
+    return frame.imageUrl
+  }
+
   return frame.downloadUrl || frame.imageUrl || ''
 }
 

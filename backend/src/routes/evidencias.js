@@ -398,7 +398,7 @@ router.get('/:ticketId/export-docx', async (req, res) => {
         for (let frameIndex = 0; frameIndex < orderedScenarioFrames.length; frameIndex += 1) {
           const frame = orderedScenarioFrames[frameIndex]
           const imageBuffer = await fs.readFile(frame.filePath)
-          docChildren.push(buildStepTitle(`PASSO AUXILIAR ${frameIndex + 1}`, { before: 180, after: 120 }))
+          docChildren.push(buildStepTitle(`PASSO ${frameIndex + 1}`, { before: 180, after: 120 }))
           docChildren.push(
             new Paragraph({
               children: [

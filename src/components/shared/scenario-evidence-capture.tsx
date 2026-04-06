@@ -38,6 +38,10 @@ interface PreviousFrameState {
 }
 
 function getFrameSource(frame: Pick<RetestFrame, 'downloadUrl' | 'imageUrl'>) {
+  if (frame.imageUrl?.startsWith('data:')) {
+    return frame.imageUrl
+  }
+
   return frame.downloadUrl || frame.imageUrl || ''
 }
 
