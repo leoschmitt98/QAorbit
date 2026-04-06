@@ -23,6 +23,24 @@ interface TicketContextFormProps {
 const productTypes: ProductType[] = ['Portal', 'Sistema interno', 'API']
 const origins: TicketOrigin[] = ['Suporte', 'Cliente', 'Interno']
 
+function normalizeScopeLabel(value: string) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function moduleMatchesPortalArea(module: CatalogModulo, portalArea: string) {
+  const area = normalizeScopeLabel(portalArea)
+  if (!area) return true
+
+  const portalName = normalizeScopeLabel(module.portalNome || '')
+  if (!portalName) return true
+
+  return portalName.includes(area)
+}
+
 export function TicketContextForm({
   value,
   projects,
@@ -39,11 +57,16 @@ export function TicketContextForm({
   onChange,
 }: TicketContextFormProps) {
   const [clipboardText, setClipboardText] = useState('')
-  const availableModules = modules.filter((item) => item.projetoId === value.projectId)
+  const availableModules = modules.filter(
+    (item) => item.projetoId === value.projectId && moduleMatchesPortalArea(item, value.portalArea),
+  )
 
   function update<K extends keyof TicketContext>(key: K, nextValue: TicketContext[K]) {
     const next = { ...value, [key]: nextValue }
     if (key === 'projectId') {
+      next.moduleId = ''
+    }
+    if (key === 'portalArea') {
       next.moduleId = ''
     }
     onChange(next)
@@ -327,9 +350,11 @@ function SelectField({ label, value, onChange, options, loading }: SelectFieldPr
         disabled={loading}
         className="h-12 w-full rounded-2xl border border-border bg-black/20 px-4 text-sm text-foreground outline-none focus:border-accent/40 disabled:opacity-60"
       >
-        <option value="">{loading ? 'Carregando...' : 'Selecione'}</option>
+        <option value="" style={{ backgroundColor: '#09130c', color: '#d8e0d4' }}>
+          {loading ? 'Carregando...' : 'Selecione'}
+        </option>
         {options.map((option) => (
-          <option key={option.value} value={option.value}>
+          <option key={option.value} value={option.value} style={{ backgroundColor: '#09130c', color: '#f5f7f1' }}>
             {option.label}
           </option>
         ))}
