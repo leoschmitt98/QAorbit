@@ -45,6 +45,45 @@ function getFrameSource(frame: Pick<RetestFrame, 'downloadUrl' | 'imageUrl'>) {
   return frame.downloadUrl || frame.imageUrl || ''
 }
 
+function FrameImage({
+  frame,
+  alt,
+  className,
+}: {
+  frame: Pick<RetestFrame, 'downloadUrl' | 'imageUrl'>
+  alt: string
+  className: string
+}) {
+  const primarySource = getFrameSource(frame)
+  const fallbackSource =
+    frame.imageUrl && frame.imageUrl !== primarySource ? frame.imageUrl : frame.downloadUrl && frame.downloadUrl !== primarySource ? frame.downloadUrl : ''
+  const [src, setSrc] = useState(primarySource)
+
+  useEffect(() => {
+    setSrc(primarySource)
+  }, [primarySource])
+
+  if (!src && !fallbackSource) {
+    return <div className={cn(className, 'flex items-center justify-center bg-black/20 text-xs text-muted')}>Imagem indisponivel</div>
+  }
+
+  return (
+    <img
+      src={src || fallbackSource}
+      alt={alt}
+      className={className}
+      onError={() => {
+        if (fallbackSource && src !== fallbackSource) {
+          setSrc(fallbackSource)
+          return
+        }
+
+        setSrc('')
+      }}
+    />
+  )
+}
+
 export function ScenarioEvidenceCapture({ ticketId, scenario, onChange }: ScenarioEvidenceCaptureProps) {
   const [selectedFrameId, setSelectedFrameId] = useState<string>(scenario.frames?.[0]?.id ?? '')
   const [isPlaying, setIsPlaying] = useState(false)
@@ -371,7 +410,7 @@ export function ScenarioEvidenceCapture({ ticketId, scenario, onChange }: Scenar
                 )}
               >
                 <button type="button" onClick={() => setSelectedFrameId(frame.id)} className="block w-full text-left">
-                  <img src={getFrameSource(frame)} alt={frame.name} className="h-28 w-full object-cover" />
+                  <FrameImage frame={frame} alt={frame.name} className="h-28 w-full object-cover" />
                   <div className="space-y-1 px-4 py-3">
                     <p className="font-semibold text-foreground">
                       Quadro {index + 1} - {frame.timestampLabel}
@@ -400,7 +439,7 @@ export function ScenarioEvidenceCapture({ ticketId, scenario, onChange }: Scenar
           <div className="space-y-3">
             <div className="relative min-h-[320px] overflow-hidden rounded-3xl border border-border bg-black/30">
               {selectedFrame ? (
-                <img src={getFrameSource(selectedFrame)} alt={selectedFrame.name} className="h-[320px] w-full object-contain" />
+                <FrameImage frame={selectedFrame} alt={selectedFrame.name} className="h-[320px] w-full object-contain" />
               ) : (
                 <div className="flex h-[320px] items-center justify-center text-sm text-muted">
                   Selecione um quadro do cenário auxiliar para revisar.

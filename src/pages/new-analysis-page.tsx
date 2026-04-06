@@ -1131,15 +1131,28 @@ export function NewAnalysisPage() {
                   ['Unidade', ticket.unitCode],
                   ['Branch', ticket.branchName],
                   ['Changelog do dev', ticket.developerChangelog],
-                ].map(([label, value]) => (
-                  <div
-                    key={label}
-                    className="flex items-center justify-between rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm"
-                  >
-                    <span className="text-muted">{label}</span>
-                    <span className="font-semibold text-foreground">{value}</span>
-                  </div>
-                ))}
+                ].map(([label, value]) => {
+                  const normalizedValue = String(value || '').trim() || '-'
+                  const shouldStack =
+                    normalizedValue.length > 80 ||
+                    normalizedValue.includes('\n') ||
+                    label === 'Changelog do dev' ||
+                    label === 'Base'
+
+                  return (
+                    <div
+                      key={label}
+                      className={`rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm ${shouldStack ? 'space-y-2' : 'flex items-start justify-between gap-3'}`}
+                    >
+                      <span className="text-muted">{label}</span>
+                      <span
+                        className={`font-semibold text-foreground ${shouldStack ? 'block whitespace-pre-wrap break-words' : 'max-w-[65%] text-right whitespace-pre-wrap break-words'}`}
+                      >
+                        {normalizedValue}
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
               <div className="rounded-2xl border border-accent/15 bg-accent/8 p-4">
                 <p className="text-sm font-semibold text-foreground">Status operacional do chamado</p>

@@ -23,6 +23,16 @@ function resolveStoredAssetUrl(ticketId, frame) {
   return `/storage/chamados/${encodeURIComponent(sanitizeSegment(ticketId))}/quadros/${encodeURIComponent(fileName)}`
 }
 
+function resolveScenarioStoredAssetUrl(ticketId, scenarioId, frame) {
+  const directUrl = normalizeString(frame?.DownloadUrl || frame?.downloadUrl || frame?.imageUrl)
+  if (directUrl) return directUrl
+
+  const fileName = normalizeString(frame?.FileName || frame?.fileName)
+  if (!fileName || !scenarioId) return ''
+
+  return `/storage/chamados/${encodeURIComponent(sanitizeSegment(ticketId))}/cenarios/${encodeURIComponent(sanitizeSegment(scenarioId))}/quadros/${encodeURIComponent(fileName)}`
+}
+
 async function mergeScenarioEvidenceFromLegacy(ticketId, draft) {
   try {
     const legacyDraft = await readLegacyWorkflow(ticketId)
@@ -41,7 +51,16 @@ async function mergeScenarioEvidenceFromLegacy(ticketId, draft) {
               ...scenario,
               gifName: legacyScenario.gifName || '',
               gifPreviewUrl: legacyScenario.gifPreviewUrl || '',
-              frames: Array.isArray(legacyScenario.frames) ? legacyScenario.frames : [],
+              frames: Array.isArray(legacyScenario.frames)
+                ? legacyScenario.frames.map((frame) => {
+                    const resolvedUrl = resolveScenarioStoredAssetUrl(ticketId, scenario.id, frame)
+                    return {
+                      ...frame,
+                      imageUrl: resolvedUrl || frame.imageUrl || '',
+                      downloadUrl: resolvedUrl || frame.downloadUrl || frame.imageUrl || '',
+                    }
+                  })
+                : [],
             }
           : scenario
       }),

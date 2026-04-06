@@ -69,6 +69,45 @@ function getFrameSource(frame: Pick<RetestFrame, 'downloadUrl' | 'imageUrl'>) {
   return frame.downloadUrl || frame.imageUrl || ''
 }
 
+function FrameImage({
+  frame,
+  alt,
+  className,
+}: {
+  frame: Pick<RetestFrame, 'downloadUrl' | 'imageUrl'>
+  alt: string
+  className: string
+}) {
+  const primarySource = getFrameSource(frame)
+  const fallbackSource =
+    frame.imageUrl && frame.imageUrl !== primarySource ? frame.imageUrl : frame.downloadUrl && frame.downloadUrl !== primarySource ? frame.downloadUrl : ''
+  const [src, setSrc] = useState(primarySource)
+
+  useEffect(() => {
+    setSrc(primarySource)
+  }, [primarySource])
+
+  if (!src && !fallbackSource) {
+    return <div className={cn(className, 'flex items-center justify-center bg-black/20 text-xs text-muted')}>Imagem indisponivel</div>
+  }
+
+  return (
+    <img
+      src={src || fallbackSource}
+      alt={alt}
+      className={className}
+      onError={() => {
+        if (fallbackSource && src !== fallbackSource) {
+          setSrc(fallbackSource)
+          return
+        }
+
+        setSrc('')
+      }}
+    />
+  )
+}
+
 export function BugEvidenceCapture({ ticketId, bugId, value, onChange }: BugEvidenceCaptureProps) {
   const [selectedFrameId, setSelectedFrameId] = useState<string>(value.frames[0]?.id ?? '')
   const [activeTool, setActiveTool] = useState<FrameAnnotationType>('circle')
@@ -500,7 +539,7 @@ export function BugEvidenceCapture({ ticketId, bugId, value, onChange }: BugEvid
                   )}
                 >
                   <button type="button" onClick={() => setSelectedFrameId(frame.id)} className="block w-full text-left">
-                    <img src={getFrameSource(frame)} alt={frame.name} className="h-32 w-full object-cover" />
+                    <FrameImage frame={frame} alt={frame.name} className="h-32 w-full object-cover" />
                     <div className="space-y-1 px-4 py-3">
                       <p className="font-semibold text-foreground">Quadro {index + 1}</p>
                       {frame.description?.trim() ? <p className="line-clamp-2 text-sm leading-6 text-muted">{frame.description}</p> : null}
@@ -553,7 +592,7 @@ export function BugEvidenceCapture({ ticketId, bugId, value, onChange }: BugEvid
             <div className="relative min-h-[340px] overflow-hidden rounded-3xl border border-border bg-black/30" onClick={handleFrameCanvasClick}>
               {selectedFrame ? (
                 <>
-                  <img src={getFrameSource(selectedFrame)} alt={selectedFrame.name} className="h-[340px] w-full object-contain" />
+                  <FrameImage frame={selectedFrame} alt={selectedFrame.name} className="h-[340px] w-full object-contain" />
                   {selectedFrame.annotations.map((annotation) => (
                     <div key={annotation.id}>{renderAnnotation(annotation)}</div>
                   ))}

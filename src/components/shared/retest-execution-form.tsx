@@ -84,6 +84,45 @@ function getFrameSource(frame: Pick<RetestFrame, 'downloadUrl' | 'imageUrl'>) {
   return frame.downloadUrl || frame.imageUrl || ''
 }
 
+function FrameImage({
+  frame,
+  alt,
+  className,
+}: {
+  frame: Pick<RetestFrame, 'downloadUrl' | 'imageUrl'>
+  alt: string
+  className: string
+}) {
+  const primarySource = getFrameSource(frame)
+  const fallbackSource =
+    frame.imageUrl && frame.imageUrl !== primarySource ? frame.imageUrl : frame.downloadUrl && frame.downloadUrl !== primarySource ? frame.downloadUrl : ''
+  const [src, setSrc] = useState(primarySource)
+
+  useEffect(() => {
+    setSrc(primarySource)
+  }, [primarySource])
+
+  if (!src && !fallbackSource) {
+    return <div className={cn(className, 'flex items-center justify-center bg-black/20 text-xs text-muted')}>Imagem indisponivel</div>
+  }
+
+  return (
+    <img
+      src={src || fallbackSource}
+      alt={alt}
+      className={className}
+      onError={() => {
+        if (fallbackSource && src !== fallbackSource) {
+          setSrc(fallbackSource)
+          return
+        }
+
+        setSrc('')
+      }}
+    />
+  )
+}
+
 export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecutionFormProps) {
   const [selectedFrameId, setSelectedFrameId] = useState<string>(value.frames[0]?.id ?? '')
   const [activeTool, setActiveTool] = useState<FrameAnnotationType>('circle')
@@ -703,7 +742,7 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
                 )}
               >
                 <button type="button" onClick={() => setSelectedFrameId(frame.id)} className="block w-full text-left">
-                  <img src={getFrameSource(frame)} alt={frame.name} className="h-32 w-full object-cover" />
+                  <FrameImage frame={frame} alt={frame.name} className="h-32 w-full object-cover" />
                   <div className="space-y-1 px-4 py-3">
                     <p className="font-semibold text-foreground">
                       Quadro {index + 1} - {frame.timestampLabel}
@@ -770,7 +809,7 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
           >
             {selectedFrame ? (
               <>
-                <img src={getFrameSource(selectedFrame)} alt={selectedFrame.name} className="h-[340px] w-full object-contain" />
+                <FrameImage frame={selectedFrame} alt={selectedFrame.name} className="h-[340px] w-full object-contain" />
                 {selectedFrame.annotations.map((annotation) => (
                   <div key={annotation.id}>{renderAnnotation(annotation)}</div>
                 ))}
@@ -876,7 +915,7 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
                       const frameIndex = value.frames.findIndex((item) => item.id === frame.id)
                       return (
                         <div key={frame.id} className="relative w-40 overflow-hidden rounded-2xl border border-accent/25 bg-black/20">
-                          <img src={getFrameSource(frame)} alt={frame.name} className="h-24 w-full object-cover" />
+                          <FrameImage frame={frame} alt={frame.name} className="h-24 w-full object-cover" />
                           <div className="space-y-1 bg-background/90 px-3 py-2 text-xs text-foreground">
                             <p>Quadro {frameIndex + 1}</p>
                             {frame.description?.trim() ? (
