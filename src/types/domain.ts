@@ -115,6 +115,8 @@ export interface BugRecord {
   reproductionSteps: BugReproductionStep[]
   evidence: BugEvidenceDraft
   ticketSnapshot: BugTicketSnapshot
+  createdByUserId?: string
+  ownerName?: string
 }
 
 export interface ExecutionItem {
@@ -329,6 +331,8 @@ export interface SavedFlowSummary {
   framesCount: number
   scenariosCount: number
   historyRecordsCount?: number
+  createdByUserId?: string
+  ownerName?: string
 }
 
 export interface HistoricalTestMetadataDraft {
@@ -374,6 +378,8 @@ export interface HistoricalTestRecord {
   bugWordUrl?: string
   evidencias: HistoricalEvidenceFrameSummary[]
   relatedHistoryIds: string[]
+  createdByUserId?: string
+  ownerName?: string
 }
 
 export type HistoricalRecommendationType = 'historico_relacionado' | 'regressao_sugerida'

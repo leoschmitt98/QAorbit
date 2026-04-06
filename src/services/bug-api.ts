@@ -14,6 +14,8 @@ export interface BugSummary {
   projectName: string
   moduleId?: string
   moduleName: string
+  createdByUserId?: string
+  ownerName?: string
 }
 
 export interface BugDetailResponse {
@@ -48,11 +50,11 @@ async function parseJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export function useBugsQuery() {
+export function useBugsQuery(scope: 'mine' | 'all' = 'mine') {
   return useQuery({
-    queryKey: ['stored-bugs'],
+    queryKey: ['stored-bugs', scope],
     queryFn: async () => {
-      const response = await fetch('/api/bugs')
+      const response = await fetch(`/api/bugs?scope=${encodeURIComponent(scope)}`)
       return parseJson<BugSummary[]>(response)
     },
   })

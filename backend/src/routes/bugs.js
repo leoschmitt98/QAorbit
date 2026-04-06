@@ -14,6 +14,7 @@ import {
 import { createRequest, getPool, queryTrustedJson, sql } from '../db.js'
 import { loadWorkflowProgress } from '../lib/chamados-store.js'
 import { sanitizeSegment, storageRoot, ticketDirectory, readLegacyWorkflow } from '../lib/legacy-storage.js'
+import { canAccessOwnedRecord, resolveWorkspaceScope } from '../lib/auth.js'
 
 const router = Router()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -111,10 +112,13 @@ async function resolveCatalogNames(projectId, moduleId) {
   }
 }
 
-async function loadWorkflow(ticketId) {
+async function loadWorkflow(ticketId, auth) {
   try {
-    return await loadWorkflowProgress(ticketId)
-  } catch {
+    return await loadWorkflowProgress(ticketId, auth)
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Acesso restrito')) {
+      throw error
+    }
     return readLegacyWorkflow(ticketId)
   }
 }
@@ -131,7 +135,10 @@ async function loadBugById(bugId) {
     const request = createRequest(pool)
     request.input('bugId', sql.NVarChar(120), bugId)
     const result = await request.query(`
-      SELECT * FROM dbo.Bugs WHERE BugId = @bugId;
+      SELECT b.*, ownerUser.Nome AS OwnerName
+      FROM dbo.Bugs b
+      LEFT JOIN dbo.UsuariosQaOrbit ownerUser ON ownerUser.UserId = b.CreatedByUserId
+      WHERE b.BugId = @bugId;
       SELECT * FROM dbo.BugPassosReproducao WHERE BugId = @bugId ORDER BY Ordem;
       SELECT * FROM dbo.BugQuadros WHERE BugId = @bugId ORDER BY OrdemExibicao;
     `)
@@ -194,6 +201,8 @@ async function loadBugById(bugId) {
             initialAnalysis: bugRow.AnaliseInicial || '',
             documentoBaseName: bugRow.DocumentoBaseNome || '',
           },
+          createdByUserId: bugRow.CreatedByUserId || '',
+          ownerName: bugRow.OwnerName || '',
         },
       }
     }
@@ -457,9 +466,13 @@ function buildConclusionParagraphs(bug, workflow) {
 
 router.get('/', async (_req, res) => {
   try {
+    const scope = resolveWorkspaceScope(_req.auth, _req.query.scope)
     const pool = await getPool()
     if (pool) {
-      const result = await createRequest(pool).query(`
+      const request = createRequest(pool)
+      request.input('scope', sql.NVarChar(10), scope)
+      request.input('userId', sql.NVarChar(120), _req.auth?.userId || '')
+      const result = await request.query(`
         SELECT
           BugId AS id,
           TicketId AS ticketId,
@@ -470,8 +483,12 @@ router.get('/', async (_req, res) => {
           DataCriacao AS createdAt,
           DataAtualizacao AS updatedAt,
           CAST(ProjetoId AS VARCHAR(20)) AS projectId,
-          CAST(ModuloId AS VARCHAR(20)) AS moduleId
+          CAST(ModuloId AS VARCHAR(20)) AS moduleId,
+          CreatedByUserId AS createdByUserId,
+          ownerUser.Nome AS ownerName
         FROM dbo.Bugs
+        LEFT JOIN dbo.UsuariosQaOrbit ownerUser ON ownerUser.UserId = dbo.Bugs.CreatedByUserId
+        WHERE @scope = 'all' OR dbo.Bugs.CreatedByUserId = @userId
         ORDER BY DataAtualizacao DESC
       `)
 
@@ -480,9 +497,11 @@ router.get('/', async (_req, res) => {
           ...row,
           createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : new Date().toISOString(),
           updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : new Date().toISOString(),
-          projectName: row.projectId || '-',
-          moduleName: row.moduleId || '-',
-        })),
+            projectName: row.projectId || '-',
+            moduleName: row.moduleId || '-',
+            createdByUserId: row.createdByUserId || '',
+            ownerName: row.ownerName || '',
+          })),
       )
     }
 
@@ -500,6 +519,7 @@ router.get('/', async (_req, res) => {
         try {
           const raw = await fs.readFile(path.join(bugsDirectory, bugFile.name), 'utf-8')
           const bug = JSON.parse(raw)
+          if (scope !== 'all' && !canAccessOwnedRecord(_req.auth, bug.createdByUserId || _req.auth?.userId)) continue
           bugs.push({
             id: bug.id,
             ticketId: bug.ticketId,
@@ -513,6 +533,8 @@ router.get('/', async (_req, res) => {
             projectName: bug.ticketSnapshot?.projectName || bug.ticketSnapshot?.projectId || '-',
             moduleId: bug.ticketSnapshot?.moduleId || '',
             moduleName: bug.ticketSnapshot?.moduleName || bug.ticketSnapshot?.moduleId || '-',
+            createdByUserId: bug.createdByUserId || '',
+            ownerName: bug.ownerName || '',
           })
         } catch {
           continue
@@ -534,8 +556,11 @@ router.get('/:bugId', async (req, res) => {
   try {
     const found = await loadBugById(req.params.bugId)
     if (!found) return res.status(404).json({ message: 'Bug nao encontrado.' })
+    if (!canAccessOwnedRecord(req.auth, found.bug.createdByUserId || req.auth?.userId)) {
+      return res.status(403).json({ message: 'Este bug pertence ao workspace de outro QA.' })
+    }
 
-    const workflow = await loadWorkflow(found.ticketId)
+    const workflow = await loadWorkflow(found.ticketId, req.auth)
     const evidenceFrames = await loadBugFrameEvidence(found.ticketId, found.bug.id)
     return res.json({ bug: found.bug, workflow, evidenceFrames })
   } catch (error) {
@@ -555,7 +580,12 @@ router.put('/:bugId', async (req, res) => {
       return res.status(400).json({ message: 'Informe um chamado valido para vincular o bug.' })
     }
 
-    const workflow = await loadWorkflow(ticketId)
+    const currentBug = await loadBugById(bugId)
+    if (currentBug && !canAccessOwnedRecord(req.auth, currentBug.bug.createdByUserId || req.auth?.userId)) {
+      return res.status(403).json({ message: 'Este bug pertence ao workspace de outro QA.' })
+    }
+
+    const workflow = await loadWorkflow(ticketId, req.auth)
     const reproductionSteps = normalizeSteps(req.body?.reproductionSteps)
     if (reproductionSteps.length === 0) {
       return res.status(400).json({ message: 'Cadastre pelo menos um passo de reproducao para salvar o bug.' })
@@ -563,7 +593,7 @@ router.put('/:bugId', async (req, res) => {
 
     const catalogNames = await resolveCatalogNames(workflow.ticket?.projectId, workflow.ticket?.moduleId)
     const { baseDirectory, bugPath } = bugPaths(ticketId, bugId)
-    const existingBug = await loadBug(ticketId, bugId).catch(() => null)
+    const existingBug = currentBug?.bug ?? (await loadBug(ticketId, bugId).catch(() => null))
     const createdAt = existingBug?.createdAt || new Date().toISOString()
     const updatedAt = new Date().toISOString()
 
@@ -580,6 +610,8 @@ router.put('/:bugId', async (req, res) => {
       updatedAt,
       reproductionSteps,
       evidence: normalizeEvidence(req.body?.evidence, existingBug?.evidence),
+      createdByUserId: existingBug?.createdByUserId || req.auth?.userId || '',
+      ownerName: existingBug?.ownerName || req.auth?.name || '',
       ticketSnapshot: {
         ticketId: workflow.ticket?.ticketId || ticketId,
         ticketTitle: workflow.ticket?.title || '',
@@ -636,6 +668,8 @@ router.put('/:bugId', async (req, res) => {
         bugRequest.input('analiseInicial', sql.NVarChar(sql.MAX), bugRecord.ticketSnapshot.initialAnalysis || '')
         bugRequest.input('documentoBaseNome', sql.NVarChar(255), bugRecord.ticketSnapshot.documentoBaseName || '')
         bugRequest.input('dataCriacao', sql.DateTime2, new Date(createdAt))
+        bugRequest.input('createdByUserId', sql.NVarChar(120), bugRecord.createdByUserId || null)
+        bugRequest.input('updatedByUserId', sql.NVarChar(120), req.auth?.userId || null)
         await bugRequest.query(`
           MERGE dbo.Bugs AS target
           USING (SELECT @bugId AS BugId) AS src
@@ -665,12 +699,13 @@ router.put('/:bugId', async (req, res) => {
               DescricaoProblemaChamado = @descricaoProblemaChamado,
               AnaliseInicial = @analiseInicial,
               DocumentoBaseNome = @documentoBaseNome,
+              UpdatedByUserId = @updatedByUserId,
               DataAtualizacao = SYSDATETIME()
           WHEN NOT MATCHED THEN
             INSERT
-            (BugId, TicketId, Titulo, ComportamentoEsperado, ComportamentoObtido, Severidade, Prioridade, StatusBug, ProjetoId, ModuloId, Ambiente, Versao, Origem, BaseReferencia, AccessUrl, UsuarioAcesso, SenhaAcesso, EmpresaCodigo, UnidadeCodigo, BranchName, ChangelogDev, DescricaoProblemaChamado, AnaliseInicial, DocumentoBaseNome, DataCriacao, DataAtualizacao)
+            (BugId, TicketId, Titulo, ComportamentoEsperado, ComportamentoObtido, Severidade, Prioridade, StatusBug, ProjetoId, ModuloId, Ambiente, Versao, Origem, BaseReferencia, AccessUrl, UsuarioAcesso, SenhaAcesso, EmpresaCodigo, UnidadeCodigo, BranchName, ChangelogDev, DescricaoProblemaChamado, AnaliseInicial, DocumentoBaseNome, DataCriacao, DataAtualizacao, CreatedByUserId, UpdatedByUserId)
             VALUES
-            (@bugId, @ticketId, @titulo, @comportamentoEsperado, @comportamentoObtido, @severidade, @prioridade, @statusBug, @projetoId, @moduloId, @ambiente, @versao, @origem, @baseReferencia, @accessUrl, @usuarioAcesso, @senhaAcesso, @empresaCodigo, @unidadeCodigo, @branchName, @changelogDev, @descricaoProblemaChamado, @analiseInicial, @documentoBaseNome, @dataCriacao, SYSDATETIME());
+            (@bugId, @ticketId, @titulo, @comportamentoEsperado, @comportamentoObtido, @severidade, @prioridade, @statusBug, @projetoId, @moduloId, @ambiente, @versao, @origem, @baseReferencia, @accessUrl, @usuarioAcesso, @senhaAcesso, @empresaCodigo, @unidadeCodigo, @branchName, @changelogDev, @descricaoProblemaChamado, @analiseInicial, @documentoBaseNome, @dataCriacao, SYSDATETIME(), @createdByUserId, @updatedByUserId);
         `)
 
         const cleanup = transaction.request()
@@ -712,8 +747,11 @@ router.get('/:bugId/export-docx', async (req, res) => {
   try {
     const found = await loadBugById(req.params.bugId)
     if (!found) return res.status(404).json({ message: 'Bug nao encontrado.' })
+    if (!canAccessOwnedRecord(req.auth, found.bug.createdByUserId || req.auth?.userId)) {
+      return res.status(403).json({ message: 'Este bug pertence ao workspace de outro QA.' })
+    }
 
-    const workflow = await loadWorkflow(found.ticketId)
+    const workflow = await loadWorkflow(found.ticketId, req.auth)
     const evidenceFrames = await loadBugFrameEvidence(found.ticketId, found.bug.id)
     const { docxPath, safeBugId } = bugPaths(found.ticketId, found.bug.id)
 

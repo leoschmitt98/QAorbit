@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useProjectScope } from '@/hooks/use-project-scope'
+import { useWorkspaceScope } from '@/hooks/use-workspace-scope'
 import { AgentCard } from '@/components/shared/agent-card'
 import { LoadingState } from '@/components/shared/loading-state'
 import { Card } from '@/components/ui/card'
@@ -14,11 +15,12 @@ import { listSavedFlows } from '@/services/flow-progress-api'
 export function CentralAgentsPage() {
   const navigate = useNavigate()
   const { selectedProjectId } = useProjectScope()
+  const { visibility } = useWorkspaceScope()
   const [selectedTicketId, setSelectedTicketId] = useState('')
 
   const savedFlowsQuery = useQuery({
-    queryKey: ['saved-flows-agents'],
-    queryFn: listSavedFlows,
+    queryKey: ['saved-flows-agents', visibility],
+    queryFn: () => listSavedFlows(visibility),
   })
 
   const savedFlows = useMemo(

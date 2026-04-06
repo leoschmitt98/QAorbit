@@ -3,6 +3,7 @@ import { Activity, AlertTriangle, ClipboardCheck, FileClock, FolderKanban, Spark
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useProjectScope } from '@/hooks/use-project-scope'
+import { useWorkspaceScope } from '@/hooks/use-workspace-scope'
 import { LoadingState } from '@/components/shared/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -21,16 +22,17 @@ import { formatCompactNumber, formatDate } from '@/utils/format'
 
 export function DashboardPage() {
   const { selectedProjectId } = useProjectScope()
+  const { visibility } = useWorkspaceScope()
   const projectsQuery = useCatalogProjectsQuery()
-  const bugsQuery = useBugsQuery()
+  const bugsQuery = useBugsQuery(visibility)
   const documentsQuery = useFunctionalDocumentsQuery()
   const flowsQuery = useQuery({
-    queryKey: ['dashboard-saved-flows'],
-    queryFn: listSavedFlows,
+    queryKey: ['dashboard-saved-flows', visibility],
+    queryFn: () => listSavedFlows(visibility),
   })
   const historicalTestsQuery = useQuery({
-    queryKey: ['dashboard-historical-tests'],
-    queryFn: listHistoricalTests,
+    queryKey: ['dashboard-historical-tests', visibility],
+    queryFn: () => listHistoricalTests(visibility),
   })
   const projectModulesQuery = useQuery({
     queryKey: ['dashboard-project-modules', projectsQuery.data?.map((project) => project.id).join('|') || ''],

@@ -10,6 +10,7 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { downloadBugDocx, saveBug, useBugQuery } from '@/services/bug-api'
 import { listSavedFlows, loadFlowProgress } from '@/services/flow-progress-api'
+import { useWorkspaceScope } from '@/hooks/use-workspace-scope'
 import type {
   BugEvidenceDraft,
   BugPriority,
@@ -31,10 +32,11 @@ export function BugDetailPage() {
   const [searchParams] = useSearchParams()
   const isCreateMode = !bugId
   const selectedTicketFromQuery = searchParams.get('ticketId')?.trim() || ''
+  const { visibility } = useWorkspaceScope()
 
   const savedFlowsQuery = useQuery({
-    queryKey: ['saved-flows-for-bug'],
-    queryFn: listSavedFlows,
+    queryKey: ['saved-flows-for-bug', visibility],
+    queryFn: () => listSavedFlows(visibility),
   })
   const bugQuery = useBugQuery(bugId)
 
@@ -90,7 +92,7 @@ export function BugDetailPage() {
     })()
   }, [isCreateMode, selectedTicketId])
 
-  const savedFlows = savedFlowsQuery.data ?? []
+  const savedFlows = (savedFlowsQuery.data ?? []) as Array<{ ticketId: string; title: string }>
   const inheritedContext = useMemo(() => {
     if (!workflow) return []
     return [

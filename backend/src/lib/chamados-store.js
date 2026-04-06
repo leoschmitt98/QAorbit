@@ -2,6 +2,7 @@ import { createRequest, getPool, sql } from '../db.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { readLegacyWorkflow, sanitizeSegment, storageRoot, writeLegacyWorkflow } from './legacy-storage.js'
+import { canAccessOwnedRecord, resolveWorkspaceScope } from './auth.js'
 
 function toNullableInt(value) {
   const numeric = Number(value)
@@ -289,14 +290,16 @@ async function savePromptSelections(transaction, ticketId, selectedFunctionalDoc
   }
 }
 
-export async function saveWorkflowProgress(ticketId, payload) {
+export async function saveWorkflowProgress(ticketId, payload, auth) {
   const pool = await getPool()
   const updatedAt = new Date().toISOString()
   const lifecycleStatus = payload.lifecycleStatus || 'Em andamento'
   const finalizedAt = lifecycleStatus === 'Finalizado' ? payload.finalizedAt || updatedAt : null
+  const ownerUserId = auth?.userId || ''
+  const ownerName = auth?.name || ''
 
   if (!pool) {
-    const draft = { ...payload, lifecycleStatus, finalizedAt, updatedAt }
+    const draft = { ...payload, lifecycleStatus, finalizedAt, updatedAt, createdByUserId: ownerUserId, ownerName }
     await writeLegacyWorkflow(ticketId, draft)
     return { ok: true, updatedAt }
   }
@@ -305,6 +308,18 @@ export async function saveWorkflowProgress(ticketId, payload) {
   await transaction.begin()
 
   try {
+    const ownershipRequest = transaction.request()
+    ownershipRequest.input('ticketId', sql.NVarChar(120), ticketId)
+    const ownershipResult = await ownershipRequest.query(`
+      SELECT TOP 1 CreatedByUserId
+      FROM dbo.Chamados
+      WHERE TicketId = @ticketId
+    `)
+    const existingOwnerUserId = ownershipResult.recordset[0]?.CreatedByUserId || ''
+    if (existingOwnerUserId && !canAccessOwnedRecord(auth, existingOwnerUserId)) {
+      throw new Error('Acesso restrito ao workspace deste QA.')
+    }
+
     const areaId = await resolveAreaIdByName(transaction, payload.ticket?.portalArea)
     const request = transaction.request()
     request.input('ticketId', sql.NVarChar(120), ticketId)
@@ -331,6 +346,8 @@ export async function saveWorkflowProgress(ticketId, payload) {
     request.input('lifecycleStatus', sql.NVarChar(40), lifecycleStatus)
     request.input('aiResponse', sql.NVarChar(sql.MAX), normalizeString(payload.aiResponse))
     request.input('dataFinalizacao', sql.DateTime2, finalizedAt ? new Date(finalizedAt) : null)
+    request.input('createdByUserId', sql.NVarChar(120), ownerUserId || null)
+    request.input('updatedByUserId', sql.NVarChar(120), ownerUserId || null)
     await request.query(`
       MERGE dbo.Chamados AS target
       USING (SELECT @ticketId AS TicketId) AS src
@@ -359,13 +376,14 @@ export async function saveWorkflowProgress(ticketId, payload) {
           CurrentStep = @currentStep,
           LifecycleStatus = @lifecycleStatus,
           AiResponse = @aiResponse,
+          UpdatedByUserId = @updatedByUserId,
           DataAtualizacao = SYSDATETIME(),
           DataFinalizacao = @dataFinalizacao
       WHEN NOT MATCHED THEN
         INSERT
-        (TicketId, Titulo, DescricaoProblemaCliente, ProjetoId, TipoProduto, AreaId, PortalAreaNome, ModuloId, Ambiente, Versao, Origem, BaseReferencia, AccessUrl, UsuarioAcesso, SenhaAcesso, EmpresaCodigo, UnidadeCodigo, BranchName, ChangelogDev, DocumentoBaseNome, CurrentStep, LifecycleStatus, AiResponse, DataFinalizacao)
+        (TicketId, Titulo, DescricaoProblemaCliente, ProjetoId, TipoProduto, AreaId, PortalAreaNome, ModuloId, Ambiente, Versao, Origem, BaseReferencia, AccessUrl, UsuarioAcesso, SenhaAcesso, EmpresaCodigo, UnidadeCodigo, BranchName, ChangelogDev, DocumentoBaseNome, CurrentStep, LifecycleStatus, AiResponse, DataFinalizacao, CreatedByUserId, UpdatedByUserId)
         VALUES
-        (@ticketId, @titulo, @descricaoProblemaCliente, @projetoId, @tipoProduto, @areaId, @portalAreaNome, @moduloId, @ambiente, @versao, @origem, @baseReferencia, @accessUrl, @usuarioAcesso, @senhaAcesso, @empresaCodigo, @unidadeCodigo, @branchName, @changelogDev, @documentoBaseNome, @currentStep, @lifecycleStatus, @aiResponse, @dataFinalizacao);
+        (@ticketId, @titulo, @descricaoProblemaCliente, @projetoId, @tipoProduto, @areaId, @portalAreaNome, @moduloId, @ambiente, @versao, @origem, @baseReferencia, @accessUrl, @usuarioAcesso, @senhaAcesso, @empresaCodigo, @unidadeCodigo, @branchName, @changelogDev, @documentoBaseNome, @currentStep, @lifecycleStatus, @aiResponse, @dataFinalizacao, @createdByUserId, @updatedByUserId);
     `)
 
     await saveAttachments(transaction, ticketId, payload.ticket?.supportAttachments)
@@ -382,6 +400,8 @@ export async function saveWorkflowProgress(ticketId, payload) {
       lifecycleStatus,
       finalizedAt,
       updatedAt,
+      createdByUserId: ownerUserId,
+      ownerName,
     })
 
     return { ok: true, updatedAt }
@@ -489,20 +509,29 @@ function mapWorkflowFromRecordsets(recordsets, ticketId) {
     selectedFunctionalDocumentIds: (recordsets.selectedDocs ?? []).map((row) => row.DocumentoId),
     historyRecordIds: [],
     updatedAt: ticket.DataAtualizacao ? new Date(ticket.DataAtualizacao).toISOString() : new Date().toISOString(),
+    createdByUserId: ticket.CreatedByUserId || '',
+    ownerName: ticket.OwnerName || '',
   }
 }
 
-export async function loadWorkflowProgress(ticketId) {
+export async function loadWorkflowProgress(ticketId, auth) {
   const pool = await getPool()
 
   if (!pool) {
-    return readLegacyWorkflow(ticketId)
+    const legacyDraft = await readLegacyWorkflow(ticketId)
+    if (!auth || canAccessOwnedRecord(auth, legacyDraft?.createdByUserId || auth?.userId)) {
+      return legacyDraft
+    }
+    throw new Error('Acesso restrito ao workspace deste QA.')
   }
 
   const request = createRequest(pool)
   request.input('ticketId', sql.NVarChar(120), ticketId)
   const result = await request.query(`
-    SELECT * FROM dbo.Chamados WHERE TicketId = @ticketId;
+    SELECT c.*, ownerUser.Nome AS OwnerName
+    FROM dbo.Chamados c
+    LEFT JOIN dbo.UsuariosQaOrbit ownerUser ON ownerUser.UserId = c.CreatedByUserId
+    WHERE c.TicketId = @ticketId;
     SELECT * FROM dbo.ChamadoAnexosSuporte WHERE TicketId = @ticketId ORDER BY Id;
     SELECT * FROM dbo.ChamadoProblemas WHERE TicketId = @ticketId;
     SELECT * FROM dbo.ChamadoRetestes WHERE TicketId = @ticketId;
@@ -532,16 +561,30 @@ export async function loadWorkflowProgress(ticketId) {
     ticketId,
   )
 
-  if (draft) return mergeScenarioEvidenceFromLegacy(ticketId, draft)
-  return readLegacyWorkflow(ticketId)
+  if (draft) {
+    if (!canAccessOwnedRecord(auth, draft.createdByUserId || auth?.userId)) {
+      throw new Error('Acesso restrito ao workspace deste QA.')
+    }
+    return mergeScenarioEvidenceFromLegacy(ticketId, draft)
+  }
+
+  const legacyDraft = await readLegacyWorkflow(ticketId)
+  if (!auth || canAccessOwnedRecord(auth, legacyDraft?.createdByUserId || auth?.userId)) {
+    return legacyDraft
+  }
+  throw new Error('Acesso restrito ao workspace deste QA.')
 }
 
-export async function listWorkflowProgress() {
+export async function listWorkflowProgress(auth, requestedScope) {
   const pool = await getPool()
-  const legacySummaries = await listLegacyWorkflowProgress()
+  const legacySummaries = await listLegacyWorkflowProgress(auth)
   if (!pool) return legacySummaries
+  const scope = resolveWorkspaceScope(auth, requestedScope)
 
-  const result = await createRequest(pool).query(`
+  const request = createRequest(pool)
+  request.input('scope', sql.NVarChar(10), scope)
+  request.input('userId', sql.NVarChar(120), auth?.userId || '')
+  const result = await request.query(`
     SELECT
       c.TicketId AS ticketId,
       c.Titulo AS title,
@@ -554,11 +597,15 @@ export async function listWorkflowProgress() {
       c.Ambiente AS environment,
       c.Versao AS version,
       c.CurrentStep AS currentStep,
+      c.CreatedByUserId AS createdByUserId,
+      ownerUser.Nome AS ownerName,
       (SELECT COUNT(1) FROM dbo.ChamadoRetesteQuadros q WHERE q.TicketId = c.TicketId) AS framesCount,
       (SELECT COUNT(1) FROM dbo.ChamadoCenariosComplementares cc WHERE cc.TicketId = c.TicketId) AS scenariosCount,
       (SELECT COUNT(1) FROM dbo.HistoricoTestes h WHERE h.TicketId = c.TicketId) AS historyRecordsCount
     FROM dbo.Chamados c
     LEFT JOIN dbo.ChamadoRetestes r ON r.TicketId = c.TicketId
+    LEFT JOIN dbo.UsuariosQaOrbit ownerUser ON ownerUser.UserId = c.CreatedByUserId
+    WHERE @scope = 'all' OR c.CreatedByUserId = @userId
     ORDER BY c.DataAtualizacao DESC
   `)
 
@@ -582,32 +629,54 @@ export async function listWorkflowProgress() {
   return [...merged.values()].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
 }
 
-export async function updateWorkflowLifecycleStatus(ticketId, lifecycleStatus) {
+export async function updateWorkflowLifecycleStatus(ticketId, lifecycleStatus, auth) {
   const pool = await getPool()
   const updatedAt = new Date().toISOString()
   const finalizedAt = lifecycleStatus === 'Finalizado' ? updatedAt : null
 
   if (!pool) {
     const legacy = await readLegacyWorkflow(ticketId)
+    if (auth && !canAccessOwnedRecord(auth, legacy?.createdByUserId || auth?.userId)) {
+      throw new Error('Acesso restrito ao workspace deste QA.')
+    }
     await writeLegacyWorkflow(ticketId, {
       ...legacy,
       lifecycleStatus,
       finalizedAt,
       updatedAt,
+      createdByUserId: legacy?.createdByUserId || auth?.userId || '',
+      ownerName: legacy?.ownerName || auth?.name || '',
     })
     return { ok: true, lifecycleStatus, finalizedAt, updatedAt }
   }
 
   const request = createRequest(pool)
+  const ownershipCheck = createRequest(pool)
+  ownershipCheck.input('ticketId', sql.NVarChar(120), ticketId)
+  const ownershipResult = await ownershipCheck.query(`
+    SELECT TOP 1 CreatedByUserId
+    FROM dbo.Chamados
+    WHERE TicketId = @ticketId
+  `)
+  const existingOwnerUserId = ownershipResult.recordset[0]?.CreatedByUserId || ''
+  if (existingOwnerUserId && !canAccessOwnedRecord(auth, existingOwnerUserId)) {
+    throw new Error('Acesso restrito ao workspace deste QA.')
+  }
+
   request.input('ticketId', sql.NVarChar(120), ticketId)
   request.input('lifecycleStatus', sql.NVarChar(40), lifecycleStatus)
   request.input('finalizedAt', sql.DateTime2, finalizedAt ? new Date(finalizedAt) : null)
+  request.input('updatedByUserId', sql.NVarChar(120), auth?.userId || null)
+  request.input('userId', sql.NVarChar(120), auth?.userId || '')
+  request.input('scope', sql.NVarChar(10), resolveWorkspaceScope(auth, 'mine'))
   await request.query(`
     UPDATE dbo.Chamados
     SET LifecycleStatus = @lifecycleStatus,
         DataFinalizacao = @finalizedAt,
+        UpdatedByUserId = @updatedByUserId,
         DataAtualizacao = SYSDATETIME()
     WHERE TicketId = @ticketId
+      AND (@scope = 'all' OR CreatedByUserId = @userId)
   `)
 
   try {
@@ -625,7 +694,7 @@ export async function updateWorkflowLifecycleStatus(ticketId, lifecycleStatus) {
   return { ok: true, lifecycleStatus, finalizedAt, updatedAt }
 }
 
-async function listLegacyWorkflowProgress() {
+async function listLegacyWorkflowProgress(auth) {
   const chamadosDirectory = path.join(storageRoot, 'chamados')
   const entries = await fs.readdir(chamadosDirectory, { withFileTypes: true }).catch(() => [])
   const saved = []
@@ -634,6 +703,7 @@ async function listLegacyWorkflowProgress() {
     if (!entry.isDirectory()) continue
     try {
       const draft = await readLegacyWorkflow(entry.name)
+      if (auth && !canAccessOwnedRecord(auth, draft.createdByUserId || auth?.userId)) continue
       saved.push({
         ticketId: draft.ticket?.ticketId || entry.name,
         title: draft.ticket?.title || 'Chamado salvo',
@@ -649,6 +719,8 @@ async function listLegacyWorkflowProgress() {
         framesCount: Array.isArray(draft.retest?.frames) ? draft.retest.frames.length : 0,
         scenariosCount: Array.isArray(draft.scenarios) ? draft.scenarios.length : 0,
         historyRecordsCount: Array.isArray(draft.historyRecordIds) ? draft.historyRecordIds.length : 0,
+        createdByUserId: draft.createdByUserId || '',
+        ownerName: draft.ownerName || '',
       })
     } catch {
       continue

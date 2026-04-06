@@ -1,26 +1,27 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useProjectScope } from '@/hooks/use-project-scope'
 import { LoadingState } from '@/components/shared/loading-state'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { useProjectScope } from '@/hooks/use-project-scope'
+import { useWorkspaceScope } from '@/hooks/use-workspace-scope'
 import { useBugsQuery } from '@/services/bug-api'
 import { formatDate } from '@/utils/format'
 
 export function BugsPage() {
-  const { data, isLoading } = useBugsQuery()
   const { selectedProjectId } = useProjectScope()
+  const { visibility } = useWorkspaceScope()
+  const { data, isLoading } = useBugsQuery(visibility)
   const [search, setSearch] = useState('')
 
   const filtered = useMemo(
     () =>
       (data ?? []).filter((bug) => {
         if (selectedProjectId && bug.projectId !== selectedProjectId) return false
-
-        return [bug.id, bug.ticketId, bug.title, bug.status, bug.projectName, bug.moduleName]
+        return [bug.id, bug.ticketId, bug.title, bug.status, bug.projectName, bug.moduleName, bug.ownerName]
           .join(' ')
           .toLowerCase()
           .includes(search.toLowerCase())
@@ -47,7 +48,7 @@ export function BugsPage() {
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar por ID do bug, chamado, titulo, projeto, modulo ou status..."
+          placeholder="Buscar por ID do bug, chamado, titulo, projeto, modulo, QA ou status..."
         />
         <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
           {filtered.length} bug(s) encontrado(s)
@@ -64,6 +65,9 @@ export function BugsPage() {
                   <p className="mt-2 text-sm text-muted">
                     {bug.id} · chamado {bug.ticketId} · {bug.projectName} · {bug.moduleName}
                   </p>
+                  {bug.ownerName ? (
+                    <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted">QA responsavel: {bug.ownerName}</p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <StatusBadge value={bug.status} />

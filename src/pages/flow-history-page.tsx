@@ -1,20 +1,22 @@
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { useProjectScope } from '@/hooks/use-project-scope'
 import { LoadingState } from '@/components/shared/loading-state'
 import { Card } from '@/components/ui/card'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { useProjectScope } from '@/hooks/use-project-scope'
+import { useWorkspaceScope } from '@/hooks/use-workspace-scope'
 import { useCatalogModulesQuery, useCatalogProjectsQuery } from '@/services/catalog-api'
 import { listSavedFlows } from '@/services/flow-progress-api'
-import { useQuery } from '@tanstack/react-query'
 import type { SavedFlowSummary } from '@/types/domain'
 import { formatDate } from '@/utils/format'
 
 export function FlowHistoryPage() {
   const { selectedProjectId } = useProjectScope()
+  const { visibility } = useWorkspaceScope()
   const flowsQuery = useQuery({
-    queryKey: ['saved-flow-history'],
-    queryFn: listSavedFlows,
+    queryKey: ['saved-flow-history', visibility],
+    queryFn: () => listSavedFlows(visibility),
   })
   const projectsQuery = useCatalogProjectsQuery()
 
@@ -27,9 +29,7 @@ export function FlowHistoryPage() {
     finalizados: flows.filter((flow) => flow.lifecycleStatus === 'Finalizado'),
   }
 
-  if (flowsQuery.isLoading || projectsQuery.isLoading) {
-    return <LoadingState />
-  }
+  if (flowsQuery.isLoading || projectsQuery.isLoading) return <LoadingState />
 
   return (
     <div className="space-y-6">
@@ -120,18 +120,21 @@ function FlowCard({
           <p className="mt-2 text-sm text-muted">
             {flow.ticketId} · {projectName} · {moduleName}
           </p>
+          {flow.ownerName ? (
+            <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted">QA responsavel: {flow.ownerName}</p>
+          ) : null}
         </div>
-          <div className="flex flex-wrap gap-3">
-            <div className="space-y-2 rounded-2xl border border-border bg-white/[0.02] px-3 py-2">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-muted">Status do chamado</p>
-              <StatusBadge value={flow.lifecycleStatus} />
-            </div>
-            <div className="space-y-2 rounded-2xl border border-border bg-white/[0.02] px-3 py-2">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-muted">Resultado do reteste</p>
-              <StatusBadge value={flow.status} />
-            </div>
+        <div className="flex flex-wrap gap-3">
+          <div className="space-y-2 rounded-2xl border border-border bg-white/[0.02] px-3 py-2">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted">Status do chamado</p>
+            <StatusBadge value={flow.lifecycleStatus} />
+          </div>
+          <div className="space-y-2 rounded-2xl border border-border bg-white/[0.02] px-3 py-2">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted">Resultado do reteste</p>
+            <StatusBadge value={flow.status} />
           </div>
         </div>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-5">
         <InfoBlock label="Ambiente" value={flow.environment || '-'} />

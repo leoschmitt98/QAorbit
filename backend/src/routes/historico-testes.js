@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { createRequest, getPool, sql } from '../db.js'
 import { loadWorkflowProgress } from '../lib/chamados-store.js'
 import { sanitizeSegment, storageRoot } from '../lib/legacy-storage.js'
+import { canAccessOwnedRecord, resolveWorkspaceScope } from '../lib/auth.js'
 
 const router = Router()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -86,7 +87,10 @@ async function listHistoryRecordsFromDb() {
   if (!pool) return null
 
   const result = await createRequest(pool).query(`
-    SELECT * FROM dbo.HistoricoTestes ORDER BY DataCriacao DESC;
+    SELECT h.*, ownerUser.Nome AS OwnerName
+    FROM dbo.HistoricoTestes h
+    LEFT JOIN dbo.UsuariosQaOrbit ownerUser ON ownerUser.UserId = h.CreatedByUserId
+    ORDER BY h.DataCriacao DESC;
     SELECT * FROM dbo.HistoricoTesteModulosImpactados;
     SELECT * FROM dbo.HistoricoTesteTags;
     SELECT * FROM dbo.HistoricoTesteQuadros;
@@ -153,6 +157,8 @@ function mapHistoryRecords(records, impactedModules, tags, frames) {
     evidencias: framesByHistory.get(row.HistoricoId) ?? [],
     relatedHistoryIds: [],
     impactAnalysisReady: true,
+    createdByUserId: row.CreatedByUserId || '',
+    ownerName: row.OwnerName || '',
   }))
 }
 
@@ -296,9 +302,12 @@ function buildRelatedRecommendation(record, params) {
   }
 }
 
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const records = (await listHistoryRecordsFromDb()) ?? (await readAllHistoryRecords())
+    const scope = resolveWorkspaceScope(req.auth, req.query.scope)
+    const records = ((await listHistoryRecordsFromDb()) ?? (await readAllHistoryRecords())).filter((record) =>
+      scope === 'all' ? true : canAccessOwnedRecord(req.auth, record.createdByUserId || req.auth?.userId),
+    )
     records.sort((left, right) => new Date(right.dataCriacao).getTime() - new Date(left.dataCriacao).getTime())
     return res.json(records)
   } catch (error) {
@@ -360,6 +369,9 @@ router.get('/:recordId', async (req, res) => {
   try {
     const dbRecords = await listHistoryRecordsFromDb()
     const record = dbRecords?.find((item) => item.id === req.params.recordId) || (await readHistoryRecord(req.params.recordId))
+    if (!record || !canAccessOwnedRecord(req.auth, record.createdByUserId || req.auth?.userId)) {
+      return res.status(403).json({ message: 'Este historico pertence ao workspace de outro QA.' })
+    }
     return res.json(record)
   } catch (error) {
     return res.status(404).json({
@@ -382,7 +394,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Informe o fluxo/cenario testado antes de salvar no historico.' })
     }
 
-    const workflow = await loadWorkflowProgress(ticketId)
+    const workflow = await loadWorkflowProgress(ticketId, req.auth)
     const recordId = buildHistoryId(ticketId)
     const createdAt = new Date().toISOString()
     const evidenceFrames = await collectEvidenceFrames(ticketId, workflow)
@@ -422,6 +434,8 @@ router.post('/', async (req, res) => {
         ? payload.relatedHistoryIds.map((item) => String(item))
         : [],
       impactAnalysisReady: true,
+      createdByUserId: req.auth?.userId || '',
+      ownerName: req.auth?.name || '',
     }
 
     try {
@@ -462,11 +476,12 @@ router.post('/', async (req, res) => {
         insertHistory.input('frameworkAutomacao', sql.NVarChar(50), record.frameworkAutomacao || '')
         insertHistory.input('caminhoSpec', sql.NVarChar(500), record.caminhoSpec || '')
         insertHistory.input('dataCriacao', sql.DateTime2, new Date(record.dataCriacao))
+        insertHistory.input('createdByUserId', sql.NVarChar(120), req.auth?.userId || null)
         await insertHistory.query(`
           INSERT INTO dbo.HistoricoTestes
-          (HistoricoId, TicketId, BugId, ProjetoId, ModuloPrincipalId, PortalAreaNome, FluxoCenario, ResumoProblema, ComportamentoEsperado, ComportamentoObtido, ResultadoFinal, Criticidade, TemAutomacao, FrameworkAutomacao, CaminhoSpec, DataCriacao)
+          (HistoricoId, TicketId, BugId, ProjetoId, ModuloPrincipalId, PortalAreaNome, FluxoCenario, ResumoProblema, ComportamentoEsperado, ComportamentoObtido, ResultadoFinal, Criticidade, TemAutomacao, FrameworkAutomacao, CaminhoSpec, DataCriacao, CreatedByUserId)
           VALUES
-          (@historicoId, @ticketId, @bugId, @projetoId, @moduloPrincipalId, @portalAreaNome, @fluxoCenario, @resumoProblema, @comportamentoEsperado, @comportamentoObtido, @resultadoFinal, @criticidade, @temAutomacao, @frameworkAutomacao, @caminhoSpec, @dataCriacao)
+          (@historicoId, @ticketId, @bugId, @projetoId, @moduloPrincipalId, @portalAreaNome, @fluxoCenario, @resumoProblema, @comportamentoEsperado, @comportamentoObtido, @resultadoFinal, @criticidade, @temAutomacao, @frameworkAutomacao, @caminhoSpec, @dataCriacao, @createdByUserId)
         `)
 
         for (const moduleId of record.modulosImpactados) {

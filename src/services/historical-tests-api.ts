@@ -13,8 +13,8 @@ async function parseJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export async function listHistoricalTests() {
-  const response = await fetch('/api/historico-testes')
+export async function listHistoricalTests(scope: 'mine' | 'all' = 'mine') {
+  const response = await fetch(`/api/historico-testes?scope=${encodeURIComponent(scope)}`)
   return parseJson<HistoricalTestRecord[]>(response)
 }
 

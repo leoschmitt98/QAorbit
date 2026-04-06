@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/use-auth'
 import { useProjectScope } from '@/hooks/use-project-scope'
+import { useWorkspaceScope } from '@/hooks/use-workspace-scope'
 import { useCatalogProjectsQuery } from '@/services/catalog-api'
 
 interface TopbarProps {
@@ -14,8 +15,9 @@ interface TopbarProps {
 }
 
 export function Topbar({ collapsed = false, onToggleSidebar, userName = 'Usuario', userRole = 'qa' }: TopbarProps) {
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const { selectedProjectId, setSelectedProjectId } = useProjectScope()
+  const { visibility, setVisibility, canSwitchVisibility } = useWorkspaceScope()
   const projectsQuery = useCatalogProjectsQuery()
   const selectedProjectName =
     projectsQuery.data?.find((project) => project.id === selectedProjectId)?.nome ?? ''
@@ -45,6 +47,21 @@ export function Topbar({ collapsed = false, onToggleSidebar, userName = 'Usuario
               ))}
             </select>
           </label>
+          {canSwitchVisibility ? (
+            <label className="flex min-w-[220px] flex-col gap-2 xl:flex-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted/80">
+                Escopo do workspace
+              </span>
+              <select
+                value={visibility}
+                onChange={(event) => setVisibility(event.target.value === 'all' ? 'all' : 'mine')}
+                className="h-11 w-full rounded-2xl border border-border bg-black/20 px-4 text-sm text-foreground outline-none transition focus:border-accent/40"
+              >
+                <option value="mine">Meu workspace</option>
+                <option value="all">Visao geral do time</option>
+              </select>
+            </label>
+          ) : null}
         </div>
         <div className="flex items-center gap-3">
           {onToggleSidebar ? (
@@ -64,7 +81,10 @@ export function Topbar({ collapsed = false, onToggleSidebar, userName = 'Usuario
           </button>
           <div className="hidden rounded-2xl border border-border bg-white/[0.03] px-4 py-2 text-right lg:block">
             <p className="text-sm font-semibold text-foreground">{userName}</p>
-            <p className="text-xs uppercase text-muted">{userRole}</p>
+            <p className="text-xs uppercase text-muted">
+              {userRole}
+              {user?.canViewAll ? ` · ${visibility === 'all' ? 'visao geral' : 'meu workspace'}` : ''}
+            </p>
           </div>
           <Button variant="secondary" onClick={() => void logout()}>
             Sair

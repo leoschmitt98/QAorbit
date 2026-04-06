@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { useProjectScope } from '@/hooks/use-project-scope'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { useProjectScope } from '@/hooks/use-project-scope'
+import { useWorkspaceScope } from '@/hooks/use-workspace-scope'
 import { useCatalogAreasQuery, useCatalogModulesQuery, useCatalogProjectsQuery } from '@/services/catalog-api'
 import { listHistoricalTests } from '@/services/historical-tests-api'
 
 export function HistoricalTestsPage() {
   const { selectedProjectId } = useProjectScope()
+  const { visibility } = useWorkspaceScope()
   const [projectIdOverride, setProjectIdOverride] = useState<string | null>(null)
   const [moduleId, setModuleId] = useState('')
   const [portalArea, setPortalArea] = useState('')
@@ -22,8 +24,8 @@ export function HistoricalTestsPage() {
   }, [projectId])
 
   const historyQuery = useQuery({
-    queryKey: ['historical-tests'],
-    queryFn: listHistoricalTests,
+    queryKey: ['historical-tests', visibility],
+    queryFn: () => listHistoricalTests(visibility),
   })
   const projectsQuery = useCatalogProjectsQuery()
   const modulesQuery = useCatalogModulesQuery(projectId)
@@ -40,7 +42,6 @@ export function HistoricalTestsPage() {
       if (projectId && record.projectId !== projectId) return false
       if (moduleId && record.modulePrincipalId !== moduleId) return false
       if (portalArea && record.portalArea !== portalArea) return false
-
       if (!term) return true
 
       return [
@@ -50,6 +51,7 @@ export function HistoricalTestsPage() {
         record.resumoProblema,
         record.comportamentoObtido,
         record.tags.join(' '),
+        record.ownerName,
       ]
         .join(' ')
         .toLowerCase()
@@ -117,11 +119,7 @@ export function HistoricalTestsPage() {
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-foreground">Busca por texto</span>
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Chamado, cenario, tag, problema..."
-            />
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Chamado, cenario, tag, problema..." />
           </label>
         </div>
       </Card>
@@ -137,7 +135,9 @@ export function HistoricalTestsPage() {
         {filteredRecords.length > 0 ? (
           filteredRecords.map((record) => {
             const projectName = projectOptions.find((item) => item.id === record.projectId)?.nome ?? record.projectId
-            const moduleName = moduleOptions.find((item) => item.id === record.modulePrincipalId)?.nome ?? record.modulePrincipalId
+            const moduleName =
+              moduleOptions.find((item) => item.id === record.modulePrincipalId)?.nome ?? record.modulePrincipalId
+
             return (
               <Card key={record.id} className="space-y-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -146,6 +146,9 @@ export function HistoricalTestsPage() {
                     <p className="mt-2 text-sm text-muted">
                       {record.ticketId} · {projectName || '-'} · {moduleName || '-'}
                     </p>
+                    {record.ownerName ? (
+                      <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted">QA responsavel: {record.ownerName}</p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <StatusBadge value={record.resultadoFinal} />

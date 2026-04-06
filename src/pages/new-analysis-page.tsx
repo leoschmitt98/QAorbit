@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useProjectScope } from '@/hooks/use-project-scope'
+import { useWorkspaceScope } from '@/hooks/use-workspace-scope'
 import { agents } from '@/data/mock-data'
 import { ComplementaryScenariosForm } from '@/components/shared/complementary-scenarios-form'
 import { EvidenceBuilder } from '@/components/shared/evidence-builder'
@@ -119,6 +120,7 @@ function extractArtifactPaths(changelog: string) {
 export function NewAnalysisPage() {
   const navigate = useNavigate()
   const { selectedProjectId } = useProjectScope()
+  const { visibility } = useWorkspaceScope()
   const [searchParams, setSearchParams] = useSearchParams()
   const [currentStep, setCurrentStep] = useState(0)
   const [ticket, setTicket] = useState<TicketContext>(emptyTicket)
@@ -221,7 +223,7 @@ export function NewAnalysisPage() {
 
   useEffect(() => {
     void refreshSavedFlows()
-  }, [selectedProjectId])
+  }, [selectedProjectId, visibility])
 
   useEffect(() => {
     if (!selectedProjectId || ticket.ticketId.trim() || ticket.projectId.trim()) return
@@ -294,7 +296,7 @@ export function NewAnalysisPage() {
 
   async function refreshSavedFlows() {
     try {
-      const flows = await listSavedFlows()
+      const flows = await listSavedFlows(visibility)
       setSavedFlows(flows.filter((flow) => (selectedProjectId ? flow.projectId === selectedProjectId : true)))
     } catch {
       setSavedFlows([])
@@ -1092,6 +1094,7 @@ export function NewAnalysisPage() {
                         <div>
                           <p className="font-semibold text-foreground">{flow.ticketId}</p>
                           <p className="text-muted">{flow.title}</p>
+                          {flow.ownerName ? <p className="text-xs uppercase tracking-[0.16em] text-muted">QA: {flow.ownerName}</p> : null}
                         </div>
                         <div className="text-right text-xs text-muted">
                           <p>Status do chamado: {flow.lifecycleStatus}</p>

@@ -55,8 +55,8 @@ export async function loadFlowProgress(ticketId: string) {
   return parseJson<QaFlowDraftPayload & { updatedAt: string }>(response)
 }
 
-export async function listSavedFlows() {
-  const response = await fetch('/api/chamados/progressos')
+export async function listSavedFlows(scope: 'mine' | 'all' = 'mine') {
+  const response = await fetch(`/api/chamados/progressos?scope=${encodeURIComponent(scope)}`)
   return parseJson<SavedFlowSummary[]>(response)
 }
 

@@ -104,6 +104,19 @@ export async function ensureAuthSchemaAndBootstrap() {
         UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_UsuariosQaOrbit_UpdatedAt DEFAULT SYSDATETIME()
       );
     END
+
+    IF COL_LENGTH('dbo.Chamados', 'CreatedByUserId') IS NULL
+      ALTER TABLE dbo.Chamados ADD CreatedByUserId NVARCHAR(120) NULL;
+    IF COL_LENGTH('dbo.Chamados', 'UpdatedByUserId') IS NULL
+      ALTER TABLE dbo.Chamados ADD UpdatedByUserId NVARCHAR(120) NULL;
+
+    IF COL_LENGTH('dbo.Bugs', 'CreatedByUserId') IS NULL
+      ALTER TABLE dbo.Bugs ADD CreatedByUserId NVARCHAR(120) NULL;
+    IF COL_LENGTH('dbo.Bugs', 'UpdatedByUserId') IS NULL
+      ALTER TABLE dbo.Bugs ADD UpdatedByUserId NVARCHAR(120) NULL;
+
+    IF COL_LENGTH('dbo.HistoricoTestes', 'CreatedByUserId') IS NULL
+      ALTER TABLE dbo.HistoricoTestes ADD CreatedByUserId NVARCHAR(120) NULL;
   `)
 
   const bootstrapEmail = process.env.AUTH_BOOTSTRAP_EMAIL?.trim()
@@ -267,4 +280,16 @@ export function currentSession(req) {
     name: payload.name,
     canViewAll: ['admin', 'lead', 'manager'].includes(String(payload.role || '').toLowerCase()),
   }
+}
+
+export function resolveWorkspaceScope(session, requestedScope) {
+  const normalized = String(requestedScope || '').trim().toLowerCase()
+  if (session?.canViewAll && normalized === 'all') return 'all'
+  return 'mine'
+}
+
+export function canAccessOwnedRecord(session, ownerUserId) {
+  if (!session) return false
+  if (session.canViewAll) return true
+  return Boolean(ownerUserId && session.userId === ownerUserId)
 }
