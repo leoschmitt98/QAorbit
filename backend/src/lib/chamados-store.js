@@ -376,6 +376,7 @@ export async function saveWorkflowProgress(ticketId, payload, auth) {
           CurrentStep = @currentStep,
           LifecycleStatus = @lifecycleStatus,
           AiResponse = @aiResponse,
+          CreatedByUserId = ISNULL(target.CreatedByUserId, @createdByUserId),
           UpdatedByUserId = @updatedByUserId,
           DataAtualizacao = SYSDATETIME(),
           DataFinalizacao = @dataFinalizacao
@@ -519,7 +520,7 @@ export async function loadWorkflowProgress(ticketId, auth) {
 
   if (!pool) {
     const legacyDraft = await readLegacyWorkflow(ticketId)
-    if (!auth || canAccessOwnedRecord(auth, legacyDraft?.createdByUserId || auth?.userId)) {
+    if (!auth || canAccessOwnedRecord(auth, legacyDraft?.createdByUserId)) {
       return legacyDraft
     }
     throw new Error('Acesso restrito ao workspace deste QA.')
@@ -562,14 +563,14 @@ export async function loadWorkflowProgress(ticketId, auth) {
   )
 
   if (draft) {
-    if (!canAccessOwnedRecord(auth, draft.createdByUserId || auth?.userId)) {
+    if (!canAccessOwnedRecord(auth, draft.createdByUserId)) {
       throw new Error('Acesso restrito ao workspace deste QA.')
     }
     return mergeScenarioEvidenceFromLegacy(ticketId, draft)
   }
 
   const legacyDraft = await readLegacyWorkflow(ticketId)
-  if (!auth || canAccessOwnedRecord(auth, legacyDraft?.createdByUserId || auth?.userId)) {
+  if (!auth || canAccessOwnedRecord(auth, legacyDraft?.createdByUserId)) {
     return legacyDraft
   }
   throw new Error('Acesso restrito ao workspace deste QA.')
@@ -636,7 +637,7 @@ export async function updateWorkflowLifecycleStatus(ticketId, lifecycleStatus, a
 
   if (!pool) {
     const legacy = await readLegacyWorkflow(ticketId)
-    if (auth && !canAccessOwnedRecord(auth, legacy?.createdByUserId || auth?.userId)) {
+    if (auth && !canAccessOwnedRecord(auth, legacy?.createdByUserId)) {
       throw new Error('Acesso restrito ao workspace deste QA.')
     }
     await writeLegacyWorkflow(ticketId, {
@@ -703,7 +704,7 @@ async function listLegacyWorkflowProgress(auth) {
     if (!entry.isDirectory()) continue
     try {
       const draft = await readLegacyWorkflow(entry.name)
-      if (auth && !canAccessOwnedRecord(auth, draft.createdByUserId || auth?.userId)) continue
+      if (auth && !canAccessOwnedRecord(auth, draft.createdByUserId)) continue
       saved.push({
         ticketId: draft.ticket?.ticketId || entry.name,
         title: draft.ticket?.title || 'Chamado salvo',

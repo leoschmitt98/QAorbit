@@ -306,7 +306,7 @@ router.get('/', async (req, res) => {
   try {
     const scope = resolveWorkspaceScope(req.auth, req.query.scope)
     const records = ((await listHistoryRecordsFromDb()) ?? (await readAllHistoryRecords())).filter((record) =>
-      scope === 'all' ? true : canAccessOwnedRecord(req.auth, record.createdByUserId || req.auth?.userId),
+      scope === 'all' ? true : canAccessOwnedRecord(req.auth, record.createdByUserId),
     )
     records.sort((left, right) => new Date(right.dataCriacao).getTime() - new Date(left.dataCriacao).getTime())
     return res.json(records)
@@ -369,7 +369,7 @@ router.get('/:recordId', async (req, res) => {
   try {
     const dbRecords = await listHistoryRecordsFromDb()
     const record = dbRecords?.find((item) => item.id === req.params.recordId) || (await readHistoryRecord(req.params.recordId))
-    if (!record || !canAccessOwnedRecord(req.auth, record.createdByUserId || req.auth?.userId)) {
+    if (!record || !canAccessOwnedRecord(req.auth, record.createdByUserId)) {
       return res.status(403).json({ message: 'Este historico pertence ao workspace de outro QA.' })
     }
     return res.json(record)

@@ -519,7 +519,7 @@ router.get('/', async (_req, res) => {
         try {
           const raw = await fs.readFile(path.join(bugsDirectory, bugFile.name), 'utf-8')
           const bug = JSON.parse(raw)
-          if (scope !== 'all' && !canAccessOwnedRecord(_req.auth, bug.createdByUserId || _req.auth?.userId)) continue
+          if (scope !== 'all' && !canAccessOwnedRecord(_req.auth, bug.createdByUserId)) continue
           bugs.push({
             id: bug.id,
             ticketId: bug.ticketId,
@@ -556,7 +556,7 @@ router.get('/:bugId', async (req, res) => {
   try {
     const found = await loadBugById(req.params.bugId)
     if (!found) return res.status(404).json({ message: 'Bug nao encontrado.' })
-    if (!canAccessOwnedRecord(req.auth, found.bug.createdByUserId || req.auth?.userId)) {
+    if (!canAccessOwnedRecord(req.auth, found.bug.createdByUserId)) {
       return res.status(403).json({ message: 'Este bug pertence ao workspace de outro QA.' })
     }
 
@@ -581,7 +581,7 @@ router.put('/:bugId', async (req, res) => {
     }
 
     const currentBug = await loadBugById(bugId)
-    if (currentBug && !canAccessOwnedRecord(req.auth, currentBug.bug.createdByUserId || req.auth?.userId)) {
+    if (currentBug && !canAccessOwnedRecord(req.auth, currentBug.bug.createdByUserId)) {
       return res.status(403).json({ message: 'Este bug pertence ao workspace de outro QA.' })
     }
 
@@ -699,6 +699,7 @@ router.put('/:bugId', async (req, res) => {
               DescricaoProblemaChamado = @descricaoProblemaChamado,
               AnaliseInicial = @analiseInicial,
               DocumentoBaseNome = @documentoBaseNome,
+              CreatedByUserId = ISNULL(target.CreatedByUserId, @createdByUserId),
               UpdatedByUserId = @updatedByUserId,
               DataAtualizacao = SYSDATETIME()
           WHEN NOT MATCHED THEN
@@ -747,7 +748,7 @@ router.get('/:bugId/export-docx', async (req, res) => {
   try {
     const found = await loadBugById(req.params.bugId)
     if (!found) return res.status(404).json({ message: 'Bug nao encontrado.' })
-    if (!canAccessOwnedRecord(req.auth, found.bug.createdByUserId || req.auth?.userId)) {
+    if (!canAccessOwnedRecord(req.auth, found.bug.createdByUserId)) {
       return res.status(403).json({ message: 'Este bug pertence ao workspace de outro QA.' })
     }
 
