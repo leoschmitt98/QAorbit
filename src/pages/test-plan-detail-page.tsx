@@ -35,7 +35,9 @@ export function TestPlanDetailPage() {
   const [incluirEmRegressao, setIncluirEmRegressao] = useState(false)
   const [newStepAction, setNewStepAction] = useState('')
   const [newStepExpected, setNewStepExpected] = useState('')
-  const [message, setMessage] = useState('Edite o rascunho do Test Plan, crie os steps manualmente e finalize somente quando estiver consistente.')
+  const [message, setMessage] = useState(
+    'Edite o rascunho do Test Plan, monte os passos manualmente no formato que fizer sentido para o seu time e finalize somente quando estiver consistente.',
+  )
   const [isSaving, setIsSaving] = useState(false)
   const [isAddingStep, setIsAddingStep] = useState(false)
   const [isFinalizing, setIsFinalizing] = useState(false)
@@ -161,10 +163,10 @@ export function TestPlanDetailPage() {
       <SectionHeader
         eyebrow="Test Plans"
         title={detail.titulo}
-        description="Rascunho gerado a partir do fluxo do QA Orbit. Edite os dados basicos, crie os steps manualmente e finalize quando o plano estiver pronto."
+        description="Rascunho gerado a partir do fluxo do QA Orbit. Edite os dados basicos, monte os passos manualmente em formato livre ou Gherkin e finalize quando o plano estiver pronto."
       />
 
-      <div className="grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
+      <div className="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
         <Card className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -294,22 +296,29 @@ export function TestPlanDetailPage() {
               <p className="mt-2 text-sm text-muted">{message}</p>
             </div>
 
+            <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
+              Em Gherkin, voce pode usar o primeiro campo para <span className="font-semibold text-foreground">Dado / E / Quando</span> ou deixa-lo em branco
+              quando quiser registrar apenas o <span className="font-semibold text-foreground">Entao / resultado esperado</span>.
+            </div>
+
             <div className="grid gap-4">
               <label className="space-y-2">
-                <span className="text-sm font-semibold text-foreground">Acao</span>
+                <span className="text-sm font-semibold text-foreground">Contexto / dado / quando (opcional)</span>
                 <textarea
                   value={newStepAction}
                   onChange={(event) => setNewStepAction(event.target.value)}
-                  className="min-h-[110px] rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
+                  placeholder="Ex.: Dado que o usuario acesse a configuracao de modelos..."
+                  className="min-h-[140px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
                 />
               </label>
 
               <label className="space-y-2">
-                <span className="text-sm font-semibold text-foreground">Resultado esperado</span>
+                <span className="text-sm font-semibold text-foreground">Entao / resultado esperado</span>
                 <textarea
                   value={newStepExpected}
                   onChange={(event) => setNewStepExpected(event.target.value)}
-                  className="min-h-[110px] rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
+                  placeholder="Ex.: Entao o sistema deve exibir o tipo de avaliacao corretamente."
+                  className="min-h-[140px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
                 />
               </label>
 
@@ -382,26 +391,32 @@ function EditableStepCard({ step, busy, onSave, onDelete }: EditableStepCardProp
   return (
     <div className="rounded-2xl border border-border bg-white/[0.02] p-4">
       <div className="grid gap-4">
-        <label className="space-y-2">
-          <span className="text-sm font-semibold text-foreground">Ordem</span>
-          <Input value={String(ordem)} onChange={(event) => setOrdem(Number(event.target.value || 0))} />
-        </label>
+        <div className="grid gap-4 lg:grid-cols-[120px,1fr] lg:items-start">
+          <label className="space-y-2">
+            <span className="text-sm font-semibold text-foreground">Ordem</span>
+            <Input value={String(ordem)} onChange={(event) => setOrdem(Number(event.target.value || 0))} />
+          </label>
+
+          <div className="rounded-2xl border border-border bg-black/10 px-4 py-3 text-xs uppercase tracking-[0.16em] text-muted">
+            Step {ordem} no formato livre do time. O primeiro bloco pode ficar vazio quando o foco estiver apenas no resultado esperado.
+          </div>
+        </div>
 
         <label className="space-y-2">
-          <span className="text-sm font-semibold text-foreground">Acao</span>
+          <span className="text-sm font-semibold text-foreground">Contexto / dado / quando (opcional)</span>
           <textarea
             value={acao}
             onChange={(event) => setAcao(event.target.value)}
-            className="min-h-[100px] rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
+            className="min-h-[120px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
           />
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm font-semibold text-foreground">Resultado esperado</span>
+          <span className="text-sm font-semibold text-foreground">Entao / resultado esperado</span>
           <textarea
             value={resultadoEsperado}
             onChange={(event) => setResultadoEsperado(event.target.value)}
-            className="min-h-[100px] rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
+            className="min-h-[120px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
           />
         </label>
 

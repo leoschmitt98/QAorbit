@@ -23,6 +23,10 @@ function normalizeCriticality(value) {
   return 'Media'
 }
 
+function hasOwn(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj ?? {}, key)
+}
+
 async function ensureTestPlansSchema() {
   if (!schemaReadyPromise) {
     schemaReadyPromise = (async () => {
@@ -323,8 +327,8 @@ router.post('/:id/steps', async (req, res) => {
     await loadOwnedTestPlan(req.params.id, req.auth)
     const acao = normalizeString(req.body?.acao)
     const resultadoEsperado = normalizeString(req.body?.resultadoEsperado)
-    if (!acao || !resultadoEsperado) {
-      return res.status(400).json({ message: 'Acao e resultado esperado sao obrigatorios.' })
+    if (!resultadoEsperado) {
+      return res.status(400).json({ message: 'Resultado esperado e obrigatorio para criar o step.' })
     }
 
     const pool = await getPool()
@@ -368,18 +372,33 @@ router.patch('/:id/steps/:stepId', async (req, res) => {
     await ensureTestPlansSchema()
     await loadOwnedTestPlan(req.params.id, req.auth)
     const pool = await getPool()
+    const shouldUpdateAcao = hasOwn(req.body, 'acao')
+    const shouldUpdateResultado = hasOwn(req.body, 'resultadoEsperado')
+    const shouldUpdateOrdem = hasOwn(req.body, 'ordem') && Number.isFinite(Number(req.body?.ordem))
     const request = createRequest(pool)
     request.input('testPlanId', sql.NVarChar(120), req.params.id)
     request.input('stepId', sql.NVarChar(120), req.params.stepId)
-    request.input('acao', sql.NVarChar(sql.MAX), normalizeString(req.body?.acao) || null)
-    request.input('resultadoEsperado', sql.NVarChar(sql.MAX), normalizeString(req.body?.resultadoEsperado) || null)
-    request.input('ordem', sql.Int, Number.isFinite(Number(req.body?.ordem)) ? Number(req.body.ordem) : null)
+    request.input('shouldUpdateAcao', sql.Bit, shouldUpdateAcao)
+    request.input('shouldUpdateResultado', sql.Bit, shouldUpdateResultado)
+    request.input('shouldUpdateOrdem', sql.Bit, shouldUpdateOrdem)
+    request.input('acao', sql.NVarChar(sql.MAX), shouldUpdateAcao ? normalizeString(req.body?.acao) : null)
+    request.input(
+      'resultadoEsperado',
+      sql.NVarChar(sql.MAX),
+      shouldUpdateResultado ? normalizeString(req.body?.resultadoEsperado) : null,
+    )
+    request.input('ordem', sql.Int, shouldUpdateOrdem ? Number(req.body.ordem) : null)
+
+    if (shouldUpdateResultado && !normalizeString(req.body?.resultadoEsperado)) {
+      return res.status(400).json({ message: 'Resultado esperado e obrigatorio para atualizar o step.' })
+    }
+
     await request.query(`
       UPDATE dbo.TestPlanSteps
       SET
-        Acao = COALESCE(@acao, Acao),
-        ResultadoEsperado = COALESCE(@resultadoEsperado, ResultadoEsperado),
-        Ordem = COALESCE(@ordem, Ordem),
+        Acao = CASE WHEN @shouldUpdateAcao = 1 THEN @acao ELSE Acao END,
+        ResultadoEsperado = CASE WHEN @shouldUpdateResultado = 1 THEN @resultadoEsperado ELSE ResultadoEsperado END,
+        Ordem = CASE WHEN @shouldUpdateOrdem = 1 THEN @ordem ELSE Ordem END,
         AtualizadoEm = SYSDATETIME()
       WHERE Id = @stepId
         AND TestPlanId = @testPlanId
