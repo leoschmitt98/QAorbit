@@ -301,24 +301,22 @@ export function TestPlanDetailPage() {
               <span className="font-semibold text-foreground"> acao opcional</span> podem ser preenchidos livremente, no estilo Azure.
             </div>
 
-            <div className="grid gap-4">
+            <div className="grid gap-4 rounded-2xl border border-border bg-black/10 p-4 xl:grid-cols-[1.25fr,0.75fr,auto] xl:items-end">
               <label className="space-y-2">
                 <span className="text-sm font-semibold text-foreground">Step principal</span>
-                <textarea
+                <Input
                   value={newStepExpected}
                   onChange={(event) => setNewStepExpected(event.target.value)}
                   placeholder="Ex.: Dado que o usuario acesse configurar modelo de avaliacao."
-                  className="min-h-[140px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
                 />
               </label>
 
               <label className="space-y-2">
                 <span className="text-sm font-semibold text-foreground">Acao (opcional)</span>
-                <textarea
+                <Input
                   value={newStepAction}
                   onChange={(event) => setNewStepAction(event.target.value)}
-                  placeholder="Ex.: Clicar em salvar, confirmar a edicao, abrir detalhes."
-                  className="min-h-[140px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
+                  placeholder="Ex.: Clicar em salvar."
                 />
               </label>
 
@@ -342,7 +340,13 @@ export function TestPlanDetailPage() {
             </div>
 
             {detail.steps.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-3">
+                <div className="hidden rounded-2xl border border-border bg-black/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted xl:grid xl:grid-cols-[90px,1.25fr,0.75fr,auto] xl:items-center">
+                  <span>Ordem</span>
+                  <span>Step principal</span>
+                  <span>Acao</span>
+                  <span className="text-right">Acoes</span>
+                </div>
                 {detail.steps.map((step) => (
                   <EditableStepCard
                     key={step.id}
@@ -390,41 +394,29 @@ function EditableStepCard({ step, busy, onSave, onDelete }: EditableStepCardProp
 
   return (
     <div className="rounded-2xl border border-border bg-white/[0.02] p-4">
-      <div className="grid gap-4">
-        <div className="grid gap-4 lg:grid-cols-[120px,1fr] lg:items-start">
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-foreground">Ordem</span>
-            <Input value={String(ordem)} onChange={(event) => setOrdem(Number(event.target.value || 0))} />
-          </label>
+      <div className="grid gap-3 xl:grid-cols-[90px,1.25fr,0.75fr,auto] xl:items-center">
+        <label className="space-y-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted xl:hidden">Ordem</span>
+          <Input value={String(ordem)} onChange={(event) => setOrdem(Number(event.target.value || 0))} />
+        </label>
 
-          <div className="rounded-2xl border border-border bg-black/10 px-4 py-3 text-xs uppercase tracking-[0.16em] text-muted">
-            Step {ordem} em formato livre. O campo de acao fica ao lado quando voce quiser detalhar operacoes adicionais.
-          </div>
-        </div>
+        <label className="space-y-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted xl:hidden">Step principal</span>
+          <Input
+            value={resultadoEsperado}
+            onChange={(event) => setResultadoEsperado(event.target.value)}
+            placeholder="Descreva o step"
+          />
+        </label>
 
-        <div className={`grid gap-4 ${acao ? 'xl:grid-cols-[1.2fr,0.8fr]' : 'grid-cols-1'}`}>
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-foreground">Step principal</span>
-            <textarea
-              value={resultadoEsperado}
-              onChange={(event) => setResultadoEsperado(event.target.value)}
-              className="min-h-[140px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
-            />
-          </label>
+        <label className="space-y-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted xl:hidden">Acao</span>
+          <Input value={acao} onChange={(event) => setAcao(event.target.value)} placeholder="Opcional" />
+        </label>
 
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-foreground">Acao (opcional)</span>
-            <textarea
-              value={acao}
-              onChange={(event) => setAcao(event.target.value)}
-              className="min-h-[140px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
-            />
-          </label>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 xl:justify-end">
           <Button onClick={() => onSave({ ordem, acao, resultadoEsperado })} disabled={busy}>
-            {busy ? 'Salvando...' : `Salvar step ${ordem}`}
+            {busy ? 'Salvando...' : 'Salvar'}
           </Button>
           <Button variant="secondary" onClick={onDelete} disabled={busy}>
             Excluir
