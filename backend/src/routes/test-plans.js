@@ -327,8 +327,8 @@ router.post('/:id/steps', async (req, res) => {
     await loadOwnedTestPlan(req.params.id, req.auth)
     const acao = normalizeString(req.body?.acao)
     const resultadoEsperado = normalizeString(req.body?.resultadoEsperado)
-    if (!resultadoEsperado) {
-      return res.status(400).json({ message: 'Resultado esperado e obrigatorio para criar o step.' })
+    if (!acao && !resultadoEsperado) {
+      return res.status(400).json({ message: 'Informe pelo menos o step principal ou uma acao opcional para criar o registro.' })
     }
 
     const pool = await getPool()
@@ -388,9 +388,28 @@ router.patch('/:id/steps/:stepId', async (req, res) => {
       shouldUpdateResultado ? normalizeString(req.body?.resultadoEsperado) : null,
     )
     request.input('ordem', sql.Int, shouldUpdateOrdem ? Number(req.body.ordem) : null)
+    const currentStepResult = await createRequest(pool)
+      .input('stepId', sql.NVarChar(120), req.params.stepId)
+      .input('testPlanId', sql.NVarChar(120), req.params.id)
+      .query(`
+        SELECT TOP 1 Acao, ResultadoEsperado
+        FROM dbo.TestPlanSteps
+        WHERE Id = @stepId
+          AND TestPlanId = @testPlanId
+      `)
 
-    if (shouldUpdateResultado && !normalizeString(req.body?.resultadoEsperado)) {
-      return res.status(400).json({ message: 'Resultado esperado e obrigatorio para atualizar o step.' })
+    const currentStep = currentStepResult.recordset[0]
+    if (!currentStep) {
+      return res.status(404).json({ message: 'Step do Test Plan nao encontrado.' })
+    }
+
+    const nextAcao = shouldUpdateAcao ? normalizeString(req.body?.acao) : normalizeString(currentStep.Acao)
+    const nextResultado = shouldUpdateResultado
+      ? normalizeString(req.body?.resultadoEsperado)
+      : normalizeString(currentStep.ResultadoEsperado)
+
+    if (!nextAcao && !nextResultado) {
+      return res.status(400).json({ message: 'O registro precisa manter pelo menos o step principal ou uma acao opcional.' })
     }
 
     await request.query(`

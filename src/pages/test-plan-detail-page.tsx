@@ -36,7 +36,7 @@ export function TestPlanDetailPage() {
   const [newStepAction, setNewStepAction] = useState('')
   const [newStepExpected, setNewStepExpected] = useState('')
   const [message, setMessage] = useState(
-    'Edite o rascunho do Test Plan, monte os passos manualmente no formato que fizer sentido para o seu time e finalize somente quando estiver consistente.',
+    'Edite o rascunho do Test Plan, monte os passos manualmente no formato do seu time e finalize somente quando estiver consistente.',
   )
   const [isSaving, setIsSaving] = useState(false)
   const [isAddingStep, setIsAddingStep] = useState(false)
@@ -163,7 +163,7 @@ export function TestPlanDetailPage() {
       <SectionHeader
         eyebrow="Test Plans"
         title={detail.titulo}
-        description="Rascunho gerado a partir do fluxo do QA Orbit. Edite os dados basicos, monte os passos manualmente em formato livre ou Gherkin e finalize quando o plano estiver pronto."
+        description="Rascunho gerado a partir do fluxo do QA Orbit. Edite os dados basicos, monte os passos no estilo do Azure ou Gherkin e finalize quando o plano estiver pronto."
       />
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
@@ -297,27 +297,27 @@ export function TestPlanDetailPage() {
             </div>
 
             <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
-              Em Gherkin, voce pode usar o primeiro campo para <span className="font-semibold text-foreground">Dado / E / Quando</span> ou deixa-lo em branco
-              quando quiser registrar apenas o <span className="font-semibold text-foreground">Entao / resultado esperado</span>.
+              Use o formato que fizer sentido para o time. O <span className="font-semibold text-foreground">Step principal</span> e a
+              <span className="font-semibold text-foreground"> acao opcional</span> podem ser preenchidos livremente, no estilo Azure.
             </div>
 
             <div className="grid gap-4">
               <label className="space-y-2">
-                <span className="text-sm font-semibold text-foreground">Contexto / dado / quando (opcional)</span>
+                <span className="text-sm font-semibold text-foreground">Step principal</span>
                 <textarea
-                  value={newStepAction}
-                  onChange={(event) => setNewStepAction(event.target.value)}
-                  placeholder="Ex.: Dado que o usuario acesse a configuracao de modelos..."
+                  value={newStepExpected}
+                  onChange={(event) => setNewStepExpected(event.target.value)}
+                  placeholder="Ex.: Dado que o usuario acesse configurar modelo de avaliacao."
                   className="min-h-[140px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
                 />
               </label>
 
               <label className="space-y-2">
-                <span className="text-sm font-semibold text-foreground">Entao / resultado esperado</span>
+                <span className="text-sm font-semibold text-foreground">Acao (opcional)</span>
                 <textarea
-                  value={newStepExpected}
-                  onChange={(event) => setNewStepExpected(event.target.value)}
-                  placeholder="Ex.: Entao o sistema deve exibir o tipo de avaliacao corretamente."
+                  value={newStepAction}
+                  onChange={(event) => setNewStepAction(event.target.value)}
+                  placeholder="Ex.: Clicar em salvar, confirmar a edicao, abrir detalhes."
                   className="min-h-[140px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
                 />
               </label>
@@ -398,27 +398,29 @@ function EditableStepCard({ step, busy, onSave, onDelete }: EditableStepCardProp
           </label>
 
           <div className="rounded-2xl border border-border bg-black/10 px-4 py-3 text-xs uppercase tracking-[0.16em] text-muted">
-            Step {ordem} no formato livre do time. O primeiro bloco pode ficar vazio quando o foco estiver apenas no resultado esperado.
+            Step {ordem} em formato livre. O campo de acao fica ao lado quando voce quiser detalhar operacoes adicionais.
           </div>
         </div>
 
-        <label className="space-y-2">
-          <span className="text-sm font-semibold text-foreground">Contexto / dado / quando (opcional)</span>
-          <textarea
-            value={acao}
-            onChange={(event) => setAcao(event.target.value)}
-            className="min-h-[120px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
-          />
-        </label>
+        <div className={`grid gap-4 ${acao ? 'xl:grid-cols-[1.2fr,0.8fr]' : 'grid-cols-1'}`}>
+          <label className="space-y-2">
+            <span className="text-sm font-semibold text-foreground">Step principal</span>
+            <textarea
+              value={resultadoEsperado}
+              onChange={(event) => setResultadoEsperado(event.target.value)}
+              className="min-h-[140px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
+            />
+          </label>
 
-        <label className="space-y-2">
-          <span className="text-sm font-semibold text-foreground">Entao / resultado esperado</span>
-          <textarea
-            value={resultadoEsperado}
-            onChange={(event) => setResultadoEsperado(event.target.value)}
-            className="min-h-[120px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
-          />
-        </label>
+          <label className="space-y-2">
+            <span className="text-sm font-semibold text-foreground">Acao (opcional)</span>
+            <textarea
+              value={acao}
+              onChange={(event) => setAcao(event.target.value)}
+              className="min-h-[140px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35"
+            />
+          </label>
+        </div>
 
         <div className="flex flex-wrap gap-3">
           <Button onClick={() => onSave({ ordem, acao, resultadoEsperado })} disabled={busy}>
