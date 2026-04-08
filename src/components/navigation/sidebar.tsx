@@ -6,6 +6,7 @@ import {
   History,
   LayoutDashboard,
   Settings,
+  ListChecks,
   Workflow,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
@@ -19,6 +20,7 @@ const items = [
   { to: '/historical-tests', label: 'Historico de Testes', icon: History },
   { to: '/projects', label: 'Projetos', icon: FolderKanban },
   { to: '/functional-base', label: 'Base Funcional', icon: FileStack },
+  { to: '/test-plans', label: 'Test Plans', icon: ListChecks },
   { to: '/bugs', label: 'Bugs / Chamados', icon: Bug },
   { to: '/settings', label: 'Configuracoes', icon: Settings },
 ]

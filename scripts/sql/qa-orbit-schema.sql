@@ -528,6 +528,54 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('dbo.TestPlans', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TestPlans (
+    Id NVARCHAR(120) NOT NULL PRIMARY KEY,
+    Titulo NVARCHAR(250) NOT NULL,
+    Objetivo NVARCHAR(MAX) NULL,
+    ProjetoId INT NOT NULL,
+    ModuloId INT NOT NULL,
+    AreaId INT NULL,
+    ChamadoIdOrigem NVARCHAR(120) NULL,
+    BugIdOrigem NVARCHAR(120) NULL,
+    Tipo NVARCHAR(80) NULL,
+    Criticidade NVARCHAR(30) NULL,
+    IncluirEmRegressao BIT NOT NULL CONSTRAINT DF_TestPlans_IncluirEmRegressao DEFAULT (0),
+    Status NVARCHAR(30) NOT NULL CONSTRAINT DF_TestPlans_Status DEFAULT ('rascunho'),
+    CriadoPorUsuarioId NVARCHAR(120) NULL,
+    CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_TestPlans_CriadoEm DEFAULT (SYSDATETIME()),
+    AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_TestPlans_AtualizadoEm DEFAULT (SYSDATETIME()),
+    FinalizadoEm DATETIME2(0) NULL,
+    CONSTRAINT FK_TestPlans_Projetos FOREIGN KEY (ProjetoId) REFERENCES dbo.Projetos (Id),
+    CONSTRAINT FK_TestPlans_Modulos FOREIGN KEY (ModuloId) REFERENCES dbo.Modulos (Id),
+    CONSTRAINT FK_TestPlans_Areas FOREIGN KEY (AreaId) REFERENCES dbo.Areas (Id),
+    CONSTRAINT FK_TestPlans_Chamados FOREIGN KEY (ChamadoIdOrigem) REFERENCES dbo.Chamados (TicketId)
+  );
+
+  CREATE INDEX IX_TestPlans_ProjetoModulo ON dbo.TestPlans (ProjetoId, ModuloId);
+  CREATE INDEX IX_TestPlans_Status ON dbo.TestPlans (Status);
+  CREATE INDEX IX_TestPlans_CriadoPorUsuarioId ON dbo.TestPlans (CriadoPorUsuarioId);
+END
+GO
+
+IF OBJECT_ID('dbo.TestPlanSteps', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.TestPlanSteps (
+    Id NVARCHAR(120) NOT NULL PRIMARY KEY,
+    TestPlanId NVARCHAR(120) NOT NULL,
+    Ordem INT NOT NULL,
+    Acao NVARCHAR(MAX) NOT NULL,
+    ResultadoEsperado NVARCHAR(MAX) NOT NULL,
+    CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_TestPlanSteps_CriadoEm DEFAULT (SYSDATETIME()),
+    AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_TestPlanSteps_AtualizadoEm DEFAULT (SYSDATETIME()),
+    CONSTRAINT FK_TestPlanSteps_TestPlans FOREIGN KEY (TestPlanId) REFERENCES dbo.TestPlans (Id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IX_TestPlanSteps_TestPlanId ON dbo.TestPlanSteps (TestPlanId, Ordem);
+END
+GO
+
 IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'Aluno')
   INSERT INTO dbo.Areas (Nome) VALUES ('Aluno');
 IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'Professor')

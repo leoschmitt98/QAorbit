@@ -424,3 +424,43 @@ export type PromptAnalysisMode =
   | 'diagnostico_repositorio'
   | 'testeplan_gherkin'
   | 'avaliacao_cypress'
+
+export type TestPlanStatus = 'rascunho' | 'finalizado'
+
+export interface TestPlanRecord {
+  id: string
+  titulo: string
+  objetivo: string
+  projectId: string
+  projectName?: string
+  moduleId: string
+  moduleName?: string
+  areaId?: string
+  areaName?: string
+  chamadoIdOrigem?: string
+  bugIdOrigem?: string
+  tipo?: string
+  criticidade?: ReuseCriticality | ''
+  incluirEmRegressao: boolean
+  status: TestPlanStatus
+  createdAt: string
+  updatedAt: string
+  finalizedAt?: string | null
+  createdByUserId?: string
+  ownerName?: string
+  stepsCount: number
+}
+
+export interface TestPlanStepRecord {
+  id: string
+  testPlanId: string
+  ordem: number
+  acao: string
+  resultadoEsperado: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TestPlanDetail extends TestPlanRecord {
+  steps: TestPlanStepRecord[]
+}

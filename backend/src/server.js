@@ -13,6 +13,7 @@ import modulosRouter from './routes/modulos.js'
 import projetoPortaisRouter from './routes/projeto-portais.js'
 import projetosRouter from './routes/projetos.js'
 import quadrosRouter from './routes/quadros.js'
+import testPlansRouter from './routes/test-plans.js'
 import { closePool } from './db.js'
 import { ensureAuthSchemaAndBootstrap, requireAuth } from './lib/auth.js'
 
@@ -38,6 +39,7 @@ app.use('/api/modulos', modulosRouter)
 app.use('/api/areas', areasRouter)
 app.use('/api/chamados', chamadosRouter)
 app.use('/api/documentos-funcionais', documentosFuncionaisRouter)
+app.use('/api/test-plans', testPlansRouter)
 app.use('/api/bugs', bugsRouter)
 app.use('/api/evidencias', evidenciasRouter)
 app.use('/api/historico-testes', historicoTestesRouter)

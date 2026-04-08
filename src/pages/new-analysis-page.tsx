@@ -22,6 +22,7 @@ import { deleteFlowProgress, listSavedFlows, loadFlowProgress, saveFlowProgress,
 import { useFunctionalDocumentsQuery } from '@/services/functional-docs-api'
 import { listRelatedHistoricalTests, saveHistoricalTest } from '@/services/historical-tests-api'
 import { importPsrDocument } from '@/services/psr-import'
+import { createTestPlan } from '@/services/test-plans-api'
 import { importTicketClipboardContent } from '@/services/ticket-clipboard-import'
 import { useQuery } from '@tanstack/react-query'
 import type {
@@ -144,6 +145,7 @@ export function NewAnalysisPage() {
   const [isOpeningBug, setIsOpeningBug] = useState(false)
   const [isDeletingProgress, setIsDeletingProgress] = useState(false)
   const [isSavingHistory, setIsSavingHistory] = useState(false)
+  const [shouldGenerateTestPlanScope, setShouldGenerateTestPlanScope] = useState(false)
   const [documentImportMessage, setDocumentImportMessage] = useState('Upload de PSR pode preencher automaticamente o cabecalho do chamado.')
   const [clipboardImportMessage, setClipboardImportMessage] = useState(
     'Cole o texto do card ou work item para o sistema tentar reconhecer os campos automaticamente.',
@@ -413,11 +415,47 @@ export function NewAnalysisPage() {
         lifecycleStatus: nextLifecycleStatus,
       })
       await updateFlowLifecycleStatus(ticket.ticketId, nextLifecycleStatus)
-      setProgressMessage(
+      let nextMessage =
         nextLifecycleStatus === 'Finalizado'
           ? `Chamado ${ticket.ticketId} marcado como finalizado.`
-          : `Chamado ${ticket.ticketId} reaberto para continuidade.`,
-      )
+          : `Chamado ${ticket.ticketId} reaberto para continuidade.`
+
+      if (nextLifecycleStatus === 'Finalizado' && shouldGenerateTestPlanScope) {
+        try {
+          const suggestedTitle = historyMetadata.flowScenario.trim()
+            ? `Test Plan - ${historyMetadata.flowScenario.trim()}`
+            : ticket.title.trim()
+              ? `Test Plan - ${ticket.title.trim()}`
+              : `Test Plan - ${ticket.ticketId}`
+
+          const selectedAreaId = catalogAreas.find((item) => item.nome === ticket.portalArea)?.id || ''
+          const selectedModuleName =
+            catalogModules.find((item) => item.id === ticket.moduleId)?.nome || ticket.moduleId || 'modulo principal'
+
+          const suggestedGoal = historyMetadata.flowScenario.trim()
+            ? `Cobrir manualmente o fluxo ${historyMetadata.flowScenario.trim()} no modulo ${selectedModuleName}, a partir do chamado ${ticket.ticketId}.`
+            : `Cobrir manualmente o fluxo principal do chamado ${ticket.ticketId} no modulo ${selectedModuleName}.`
+
+          await createTestPlan({
+            titulo: suggestedTitle,
+            objetivo: suggestedGoal,
+            projectId: ticket.projectId,
+            moduleId: classification.mainModuleId || ticket.moduleId,
+            areaId: selectedAreaId || undefined,
+            chamadoIdOrigem: ticket.ticketId,
+            criticidade: historyMetadata.criticality || classification.criticality,
+            tipo: 'escopo',
+            incluirEmRegressao: false,
+          })
+          nextMessage += ' Escopo de Test Plan criado como rascunho.'
+          setShouldGenerateTestPlanScope(false)
+        } catch (testPlanError) {
+          nextMessage += ` O fechamento foi concluido, mas o escopo do Test Plan nao pode ser criado agora.`
+          console.error('Falha ao criar escopo de Test Plan apos finalizar chamado:', testPlanError)
+        }
+      }
+
+      setProgressMessage(nextMessage)
       await refreshSavedFlows()
     } catch (error) {
       setProgressMessage(
@@ -1116,6 +1154,15 @@ export function NewAnalysisPage() {
                   {isDeletingProgress ? 'Excluindo...' : 'Excluir chamado'}
                 </GlowButton>
               </div>
+              <label className="flex items-center gap-3 rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
+                <input
+                  type="checkbox"
+                  checked={shouldGenerateTestPlanScope}
+                  onChange={(event) => setShouldGenerateTestPlanScope(event.target.checked)}
+                  className="h-4 w-4 rounded border-border bg-black/20 accent-[#a3ff12]"
+                />
+                <span>Gerar escopo de Test Plan ao finalizar este chamado</span>
+              </label>
               <div className="rounded-2xl border border-border bg-white/[0.02] p-4 text-sm text-muted">
                 {progressMessage}
               </div>

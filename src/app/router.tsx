@@ -18,6 +18,8 @@ import { ProjectDetailPage } from '@/pages/project-detail-page'
 import { ProjectsPage } from '@/pages/projects-page'
 import { ReportsPage } from '@/pages/reports-page'
 import { SettingsPage } from '@/pages/settings-page'
+import { TestPlanDetailPage } from '@/pages/test-plan-detail-page'
+import { TestPlansPage } from '@/pages/test-plans-page'
 import { LoginPage } from '@/pages/login-page'
 
 function ProtectedApp() {
@@ -53,6 +55,8 @@ const router = createBrowserRouter([
       { path: 'projects/:projectId', element: <ProjectDetailPage /> },
       { path: 'functional-base', element: <FunctionalBasePage /> },
       { path: 'functional-base/:documentId', element: <DocumentDetailPage /> },
+      { path: 'test-plans', element: <TestPlansPage /> },
+      { path: 'test-plans/:testPlanId', element: <TestPlanDetailPage /> },
       { path: 'bugs', element: <BugsPage /> },
       { path: 'bugs/new', element: <BugDetailPage /> },
       { path: 'bugs/:bugId', element: <BugDetailPage /> },
