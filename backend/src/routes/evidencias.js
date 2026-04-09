@@ -149,7 +149,7 @@ function buildSectionSeparator() {
 
 function buildSectionTitle(text) {
   return new Paragraph({
-    children: [new TextRun({ text: `▶ ${text.toUpperCase()}`, bold: true, color: '1F2933', size: 26 })],
+    children: [new TextRun({ text: text.toUpperCase(), bold: true, color: '1F2933', size: 26 })],
     spacing: { before: 100, after: 140 },
   })
 }
