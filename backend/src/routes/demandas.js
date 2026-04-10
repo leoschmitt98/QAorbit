@@ -62,6 +62,88 @@ async function ensureEvidenceFolder(demandaId, tarefaId, cenarioId) {
   return folder
 }
 
+function ensurePngDataUrl(imageDataUrl) {
+  const match = String(imageDataUrl || '').match(/^data:image\/png;base64,(.+)$/)
+  if (!match) {
+    throw new Error('Formato de quadro invalido. Envie uma imagem PNG em base64.')
+  }
+
+  return match[1]
+}
+
+async function ensureScenarioFramesFolder(demandaId, tarefaId, cenarioId) {
+  const folder = path.join(
+    storageRoot,
+    'demandas',
+    sanitizeStorageSegment(demandaId, 'sem-demanda'),
+    'tarefas',
+    sanitizeStorageSegment(tarefaId, 'sem-tarefa'),
+    'cenarios',
+    sanitizeStorageSegment(cenarioId, 'sem-cenario'),
+    'quadros',
+  )
+
+  await fs.mkdir(folder, { recursive: true })
+  return folder
+}
+
+async function readFrameMetadata(metadataPath) {
+  try {
+    const content = await fs.readFile(metadataPath, 'utf-8')
+    return JSON.parse(content)
+  } catch {
+    return []
+  }
+}
+
+async function nextScenarioFrameFileName(framesDirectory) {
+  const files = await fs.readdir(framesDirectory).catch(() => [])
+  const indexes = files
+    .map((file) => {
+      const match = file.match(/^quadro-(\d+)\.png$/)
+      return match ? Number(match[1]) : 0
+    })
+    .filter(Boolean)
+
+  const nextIndex = (indexes.length > 0 ? Math.max(...indexes) : 0) + 1
+  return `quadro-${String(nextIndex).padStart(3, '0')}.png`
+}
+
+function mapScenarioFrameEntry(demandaId, tarefaId, cenarioId, entry) {
+  const safeDemandaId = sanitizeStorageSegment(demandaId, 'sem-demanda')
+  const safeTarefaId = sanitizeStorageSegment(tarefaId, 'sem-tarefa')
+  const safeCenarioId = sanitizeStorageSegment(cenarioId, 'sem-cenario')
+
+  return {
+    id: entry.id,
+    name: entry.name || entry.fileName || 'Quadro',
+    imageUrl: `/storage/demandas/${encodeURIComponent(safeDemandaId)}/tarefas/${encodeURIComponent(safeTarefaId)}/cenarios/${encodeURIComponent(safeCenarioId)}/quadros/${encodeURIComponent(entry.fileName)}`,
+    downloadUrl: `/storage/demandas/${encodeURIComponent(safeDemandaId)}/tarefas/${encodeURIComponent(safeTarefaId)}/cenarios/${encodeURIComponent(safeCenarioId)}/quadros/${encodeURIComponent(entry.fileName)}`,
+    timestampLabel: entry.timestampLabel || '00:00',
+    description: entry.description || '',
+    fileName: entry.fileName || '',
+    persistedAt: entry.persistedAt || null,
+    annotations: [],
+    editHistory: entry.editHistory || [],
+  }
+}
+
+async function loadScenarioFrames(demandaId, tarefaId, cenarioId) {
+  const framesDirectory = path.join(
+    storageRoot,
+    'demandas',
+    sanitizeStorageSegment(demandaId, 'sem-demanda'),
+    'tarefas',
+    sanitizeStorageSegment(tarefaId, 'sem-tarefa'),
+    'cenarios',
+    sanitizeStorageSegment(cenarioId, 'sem-cenario'),
+    'quadros',
+  )
+  const metadataPath = path.join(framesDirectory, 'metadata.json')
+  const metadata = await readFrameMetadata(metadataPath)
+  return metadata.map((entry) => mapScenarioFrameEntry(demandaId, tarefaId, cenarioId, entry))
+}
+
 function normalizeDemandaStatus(value) {
   const normalized = normalizeString(value)
   if (['Rascunho', 'Em andamento', 'Concluida'].includes(normalized)) return normalized
@@ -268,6 +350,8 @@ function mapCenario(row) {
     createdByUserId: row.CriadoPorUsuarioId || '',
     createdAt: row.CriadoEm ? new Date(row.CriadoEm).toISOString() : new Date().toISOString(),
     updatedAt: row.AtualizadoEm ? new Date(row.AtualizadoEm).toISOString() : new Date().toISOString(),
+    gifName: row.GifName || '',
+    gifPreviewUrl: row.GifPreviewUrl || '',
   }
 }
 
@@ -470,15 +554,22 @@ router.get('/:id', async (req, res) => {
       evidenciasByCenario.set(row.DemandaCenarioId, current)
     }
 
+    const tarefas = await Promise.all(
+      tarefasResult.recordset.map(async (row) => ({
+        ...mapTarefa(row),
+        cenarios: await Promise.all(
+          (cenariosByTarefa.get(row.Id) ?? []).map(async (cenario) => ({
+            ...cenario,
+            evidencias: evidenciasByCenario.get(cenario.id) ?? [],
+            frames: await loadScenarioFrames(req.params.id, row.Id, cenario.id),
+          })),
+        ),
+      })),
+    )
+
     return res.json({
       ...mapDemanda(demanda),
-      tarefas: tarefasResult.recordset.map((row) => ({
-        ...mapTarefa(row),
-        cenarios: (cenariosByTarefa.get(row.Id) ?? []).map((cenario) => ({
-          ...cenario,
-          evidencias: evidenciasByCenario.get(cenario.id) ?? [],
-        })),
-      })),
+      tarefas,
     })
   } catch (error) {
     const forbidden = error instanceof Error && error.message.includes('Acesso restrito')
@@ -510,6 +601,46 @@ router.get('/:id/cenarios', async (req, res) => {
     const forbidden = error instanceof Error && error.message.includes('Acesso restrito')
     return res.status(forbidden ? 403 : 500).json({
       message: forbidden ? 'Esta demanda pertence ao workspace de outro QA.' : 'Nao foi possivel listar os cenarios da demanda.',
+      detail: error instanceof Error ? error.message : 'Erro desconhecido',
+    })
+  }
+})
+
+router.get('/:id/tarefas/:tarefaId/cenarios/:cenarioId', async (req, res) => {
+  try {
+    await ensureDemandasSchema()
+    const cenario = await loadOwnedCenario(req.params.id, req.params.tarefaId, req.params.cenarioId, req.auth)
+    const pool = await getPool()
+
+    const evidenciasRequest = createRequest(pool)
+    evidenciasRequest.input('demandaId', sql.NVarChar(120), req.params.id)
+    evidenciasRequest.input('tarefaId', sql.NVarChar(120), req.params.tarefaId)
+    evidenciasRequest.input('cenarioId', sql.NVarChar(120), req.params.cenarioId)
+    const evidenciasResult = await evidenciasRequest.query(`
+      SELECT *
+      FROM dbo.DemandaCenarioEvidencias
+      WHERE DemandaId = @demandaId
+        AND DemandaTarefaId = @tarefaId
+        AND DemandaCenarioId = @cenarioId
+      ORDER BY Ordem, CriadoEm
+    `)
+
+    const frames = await loadScenarioFrames(req.params.id, req.params.tarefaId, req.params.cenarioId)
+
+    return res.json({
+      ...mapCenario(cenario),
+      evidencias: evidenciasResult.recordset.map(mapEvidencia),
+      frames,
+    })
+  } catch (error) {
+    const forbidden = error instanceof Error && error.message.includes('Acesso restrito')
+    const notFound = error instanceof Error && error.message.includes('nao encontrado')
+    return res.status(forbidden ? 403 : notFound ? 404 : 500).json({
+      message: forbidden
+        ? 'Esta demanda pertence ao workspace de outro QA.'
+        : notFound
+          ? 'Cenario da tarefa nao encontrado.'
+          : 'Nao foi possivel carregar o cenario da demanda.',
       detail: error instanceof Error ? error.message : 'Erro desconhecido',
     })
   }
@@ -1040,6 +1171,114 @@ router.delete('/:id/tarefas/:tarefaId/cenarios/:cenarioId/evidencias/:evidenciaI
     const forbidden = error instanceof Error && error.message.includes('Acesso restrito')
     return res.status(forbidden ? 403 : 500).json({
       message: forbidden ? 'Esta demanda pertence ao workspace de outro QA.' : 'Nao foi possivel remover a evidencia do cenario.',
+      detail: error instanceof Error ? error.message : 'Erro desconhecido',
+    })
+  }
+})
+
+router.post('/:id/tarefas/:tarefaId/cenarios/:cenarioId/quadros', async (req, res) => {
+  try {
+    await ensureDemandasSchema()
+    await loadOwnedCenario(req.params.id, req.params.tarefaId, req.params.cenarioId, req.auth)
+
+    const imageDataUrl = req.body?.imageDataUrl
+    const timestampLabel = normalizeString(req.body?.timestampLabel)
+    if (!imageDataUrl || !timestampLabel) {
+      return res.status(400).json({ message: 'imageDataUrl e timestampLabel sao obrigatorios.' })
+    }
+
+    const pngBase64 = ensurePngDataUrl(imageDataUrl)
+    const framesDirectory = await ensureScenarioFramesFolder(req.params.id, req.params.tarefaId, req.params.cenarioId)
+    const metadataPath = path.join(framesDirectory, 'metadata.json')
+    const fileName = await nextScenarioFrameFileName(framesDirectory)
+    const filePath = path.join(framesDirectory, fileName)
+    const persistedAt = new Date().toISOString()
+    const frameId = `${sanitizeStorageSegment(req.params.id, 'sem-demanda')}-${sanitizeStorageSegment(req.params.tarefaId, 'sem-tarefa')}-${sanitizeStorageSegment(req.params.cenarioId, 'sem-cenario')}-${fileName}`
+    const metadata = await readFrameMetadata(metadataPath)
+
+    await fs.writeFile(filePath, Buffer.from(pngBase64, 'base64'))
+
+    metadata.push({
+      id: frameId,
+      name: `Quadro ${metadata.length + 1}`,
+      fileName,
+      timestampLabel,
+      description: normalizeString(req.body?.description),
+      persistedAt,
+      editHistory: [
+        'Quadro capturado manualmente para cenario de demanda',
+        `Capturado no timestamp ${timestampLabel}`,
+        `Persistido em disco como ${fileName}`,
+      ],
+    })
+
+    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf-8')
+
+    return res.status(201).json({
+      id: frameId,
+      fileName,
+      imageUrl: `/storage/demandas/${encodeURIComponent(sanitizeStorageSegment(req.params.id, 'sem-demanda'))}/tarefas/${encodeURIComponent(sanitizeStorageSegment(req.params.tarefaId, 'sem-tarefa'))}/cenarios/${encodeURIComponent(sanitizeStorageSegment(req.params.cenarioId, 'sem-cenario'))}/quadros/${encodeURIComponent(fileName)}`,
+      downloadUrl: `/storage/demandas/${encodeURIComponent(sanitizeStorageSegment(req.params.id, 'sem-demanda'))}/tarefas/${encodeURIComponent(sanitizeStorageSegment(req.params.tarefaId, 'sem-tarefa'))}/cenarios/${encodeURIComponent(sanitizeStorageSegment(req.params.cenarioId, 'sem-cenario'))}/quadros/${encodeURIComponent(fileName)}`,
+      persistedAt,
+    })
+  } catch (error) {
+    const forbidden = error instanceof Error && error.message.includes('Acesso restrito')
+    return res.status(forbidden ? 403 : 500).json({
+      message: forbidden ? 'Esta demanda pertence ao workspace de outro QA.' : 'Nao foi possivel persistir o quadro do cenario.',
+      detail: error instanceof Error ? error.message : 'Erro desconhecido',
+    })
+  }
+})
+
+router.patch('/:id/tarefas/:tarefaId/cenarios/:cenarioId/quadros/:fileName', async (req, res) => {
+  try {
+    await ensureDemandasSchema()
+    await loadOwnedCenario(req.params.id, req.params.tarefaId, req.params.cenarioId, req.auth)
+
+    const framesDirectory = await ensureScenarioFramesFolder(req.params.id, req.params.tarefaId, req.params.cenarioId)
+    const metadataPath = path.join(framesDirectory, 'metadata.json')
+    const targetFileName = path.basename(req.params.fileName)
+    const metadata = await readFrameMetadata(metadataPath)
+    const nextMetadata = metadata.map((entry) =>
+      entry.fileName === targetFileName
+        ? {
+            ...entry,
+            description: typeof req.body?.description === 'string' ? req.body.description : entry.description,
+            timestampLabel: typeof req.body?.timestampLabel === 'string' ? req.body.timestampLabel : entry.timestampLabel,
+          }
+        : entry,
+    )
+
+    await fs.writeFile(metadataPath, JSON.stringify(nextMetadata, null, 2), 'utf-8')
+    return res.json({ ok: true })
+  } catch (error) {
+    const forbidden = error instanceof Error && error.message.includes('Acesso restrito')
+    return res.status(forbidden ? 403 : 500).json({
+      message: forbidden ? 'Esta demanda pertence ao workspace de outro QA.' : 'Nao foi possivel atualizar os metadados do quadro.',
+      detail: error instanceof Error ? error.message : 'Erro desconhecido',
+    })
+  }
+})
+
+router.delete('/:id/tarefas/:tarefaId/cenarios/:cenarioId/quadros/:fileName', async (req, res) => {
+  try {
+    await ensureDemandasSchema()
+    await loadOwnedCenario(req.params.id, req.params.tarefaId, req.params.cenarioId, req.auth)
+
+    const framesDirectory = await ensureScenarioFramesFolder(req.params.id, req.params.tarefaId, req.params.cenarioId)
+    const metadataPath = path.join(framesDirectory, 'metadata.json')
+    const targetFileName = path.basename(req.params.fileName)
+    const filePath = path.join(framesDirectory, targetFileName)
+    const metadata = await readFrameMetadata(metadataPath)
+    const nextMetadata = metadata.filter((entry) => entry.fileName !== targetFileName)
+
+    await fs.rm(filePath, { force: true }).catch(() => null)
+    await fs.writeFile(metadataPath, JSON.stringify(nextMetadata, null, 2), 'utf-8')
+    return res.json({ ok: true })
+  } catch (error) {
+    const forbidden = error instanceof Error && error.message.includes('Acesso restrito')
+    return res.status(forbidden ? 403 : 500).json({
+      message: forbidden ? 'Esta demanda pertence ao workspace de outro QA.' : 'Nao foi possivel remover o quadro do cenario.',
       detail: error instanceof Error ? error.message : 'Erro desconhecido',
     })
   }

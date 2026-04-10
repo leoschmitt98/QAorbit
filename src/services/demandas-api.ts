@@ -71,6 +71,23 @@ export interface CreateDemandaCenarioEvidenciaPayload {
   ordem?: number
 }
 
+export interface StoredDemandaScenarioFramePayload {
+  demandaId: string
+  tarefaId: string
+  cenarioId: string
+  imageDataUrl: string
+  timestampLabel: string
+  description?: string
+}
+
+export interface StoredDemandaScenarioFrameResponse {
+  id: string
+  fileName: string
+  imageUrl: string
+  downloadUrl: string
+  persistedAt: string
+}
+
 export function useDemandasQuery(scope: 'mine' | 'all' = 'mine') {
   return useQuery({
     queryKey: ['demandas', scope],
@@ -89,6 +106,19 @@ export function useDemandaDetailQuery(demandaId?: string) {
       return parseJson<DemandaDetail>(response)
     },
     enabled: Boolean(demandaId),
+  })
+}
+
+export function useDemandaScenarioDetailQuery(demandaId?: string, tarefaId?: string, cenarioId?: string) {
+  return useQuery({
+    queryKey: ['demanda', demandaId, 'tarefa', tarefaId, 'cenario', cenarioId],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/demandas/${encodeURIComponent(demandaId || '')}/tarefas/${encodeURIComponent(tarefaId || '')}/cenarios/${encodeURIComponent(cenarioId || '')}`,
+      )
+      return parseJson<DemandaCenarioRecord>(response)
+    },
+    enabled: Boolean(demandaId && tarefaId && cenarioId && cenarioId !== 'novo'),
   })
 }
 
@@ -232,6 +262,54 @@ export async function deleteDemandaCenarioEvidencia(
     `/api/demandas/${encodeURIComponent(demandaId)}/tarefas/${encodeURIComponent(tarefaId)}/cenarios/${encodeURIComponent(cenarioId)}/evidencias/${encodeURIComponent(evidenciaId)}`,
     {
       method: 'DELETE',
+    },
+  )
+
+  return parseJson<{ ok: true }>(response)
+}
+
+export async function saveDemandaScenarioFrame(payload: StoredDemandaScenarioFramePayload) {
+  const response = await fetch(
+    `/api/demandas/${encodeURIComponent(payload.demandaId)}/tarefas/${encodeURIComponent(payload.tarefaId)}/cenarios/${encodeURIComponent(payload.cenarioId)}/quadros`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  )
+
+  return parseJson<StoredDemandaScenarioFrameResponse>(response)
+}
+
+export async function deleteDemandaScenarioFrame(
+  demandaId: string,
+  tarefaId: string,
+  cenarioId: string,
+  fileName: string,
+) {
+  const response = await fetch(
+    `/api/demandas/${encodeURIComponent(demandaId)}/tarefas/${encodeURIComponent(tarefaId)}/cenarios/${encodeURIComponent(cenarioId)}/quadros/${encodeURIComponent(fileName)}`,
+    {
+      method: 'DELETE',
+    },
+  )
+
+  return parseJson<{ ok: true }>(response)
+}
+
+export async function updateDemandaScenarioFrameMetadata(
+  demandaId: string,
+  tarefaId: string,
+  cenarioId: string,
+  fileName: string,
+  payload: { description?: string; timestampLabel?: string },
+) {
+  const response = await fetch(
+    `/api/demandas/${encodeURIComponent(demandaId)}/tarefas/${encodeURIComponent(tarefaId)}/cenarios/${encodeURIComponent(cenarioId)}/quadros/${encodeURIComponent(fileName)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     },
   )
 

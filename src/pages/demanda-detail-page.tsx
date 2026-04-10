@@ -13,24 +13,15 @@ import {
   useCatalogProjectsQuery,
 } from '@/services/catalog-api'
 import {
-  createDemandaCenario,
-  createDemandaCenarioEvidencia,
   createDemandaTarefa,
   deleteDemanda,
   deleteDemandaCenario,
-  deleteDemandaCenarioEvidencia,
   deleteDemandaTarefa,
   updateDemanda,
-  updateDemandaCenario,
   updateDemandaTarefa,
   useDemandaDetailQuery,
 } from '@/services/demandas-api'
-import type {
-  DemandaCenarioRecord,
-  DemandaCenarioStatus,
-  DemandaCenarioTipo,
-  DemandaTarefaRecord,
-} from '@/types/domain'
+import type { DemandaCenarioRecord, DemandaTarefaRecord } from '@/types/domain'
 
 const selectClass =
   'h-12 w-full rounded-2xl border border-border bg-black/20 px-4 text-sm text-foreground outline-none focus:border-accent/40'
@@ -77,15 +68,6 @@ function TreeNode({
   )
 }
 
-async function fileToDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Nao foi possivel ler o arquivo selecionado.'))
-    reader.readAsDataURL(file)
-  })
-}
-
 export function DemandaDetailPage() {
   const { demandaId = '' } = useParams()
   const navigate = useNavigate()
@@ -102,7 +84,7 @@ export function DemandaDetailPage() {
   const [prioridade, setPrioridade] = useState('Media')
   const [responsavelId, setResponsavelId] = useState('')
   const [message, setMessage] = useState(
-    'Estruture a demanda em formato de arvore: dados gerais no topo, tarefas expansivas no meio e cenarios/evidencias organizados dentro de cada frente.',
+    'A demanda agora funciona como uma arvore operacional: tarefas em pilha vertical e cenarios resumidos, com abertura dedicada para detalhamento.',
   )
 
   const [newTaskTitle, setNewTaskTitle] = useState('')
@@ -116,8 +98,9 @@ export function DemandaDetailPage() {
   const [isDeletingDemand, setIsDeletingDemand] = useState(false)
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [busyTaskId, setBusyTaskId] = useState('')
-  const [busyScenarioKey, setBusyScenarioKey] = useState('')
+  const [busyScenarioId, setBusyScenarioId] = useState('')
   const [expandedTaskIds, setExpandedTaskIds] = useState<string[]>([])
+  const [expandedScenarioIds, setExpandedScenarioIds] = useState<string[]>([])
 
   useEffect(() => {
     if (!detailQuery.data) return
@@ -175,6 +158,12 @@ export function DemandaDetailPage() {
   function toggleTask(taskId: string) {
     setExpandedTaskIds((current) =>
       current.includes(taskId) ? current.filter((id) => id !== taskId) : [...current, taskId],
+    )
+  }
+
+  function toggleScenario(scenarioId: string) {
+    setExpandedScenarioIds((current) =>
+      current.includes(scenarioId) ? current.filter((id) => id !== scenarioId) : [...current, scenarioId],
     )
   }
 
@@ -253,106 +242,18 @@ export function DemandaDetailPage() {
     }
   }
 
-  async function handleCreateScenario(
-    tarefaId: string,
-    payload: {
-      titulo: string
-      descricao: string
-      tipo: DemandaCenarioTipo
-      status: DemandaCenarioStatus
-      observacoes: string
-    },
-  ) {
-    const busyKey = `${tarefaId}:create`
-    setBusyScenarioKey(busyKey)
+  async function handleDeleteScenario(taskId: string, scenarioId: string) {
+    if (!window.confirm('Deseja excluir este cenario e suas evidencias/quadros?')) return
+    setBusyScenarioId(scenarioId)
     try {
-      await createDemandaCenario(demandaId, tarefaId, payload)
-      setMessage('Cenario criado com sucesso.')
-      await refreshDetail()
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Nao foi possivel criar o cenario.')
-    } finally {
-      setBusyScenarioKey('')
-    }
-  }
-
-  async function handleSaveScenario(
-    tarefaId: string,
-    cenarioId: string,
-    payload: {
-      titulo: string
-      descricao: string
-      tipo: DemandaCenarioTipo
-      status: DemandaCenarioStatus
-      observacoes: string
-    },
-  ) {
-    const busyKey = `${tarefaId}:${cenarioId}`
-    setBusyScenarioKey(busyKey)
-    try {
-      await updateDemandaCenario(demandaId, tarefaId, cenarioId, payload)
-      setMessage('Cenario atualizado com sucesso.')
-      await refreshDetail()
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Nao foi possivel atualizar o cenario.')
-    } finally {
-      setBusyScenarioKey('')
-    }
-  }
-
-  async function handleDeleteScenario(tarefaId: string, cenarioId: string) {
-    if (!window.confirm('Deseja excluir este cenario e suas evidencias?')) return
-    const busyKey = `${tarefaId}:${cenarioId}`
-    setBusyScenarioKey(busyKey)
-    try {
-      await deleteDemandaCenario(demandaId, tarefaId, cenarioId)
+      await deleteDemandaCenario(demandaId, taskId, scenarioId)
+      setExpandedScenarioIds((current) => current.filter((id) => id !== scenarioId))
       setMessage('Cenario excluido com sucesso.')
       await refreshDetail()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir o cenario.')
     } finally {
-      setBusyScenarioKey('')
-    }
-  }
-
-  async function handleCreateEvidence(
-    tarefaId: string,
-    cenarioId: string,
-    file: File,
-    legenda: string,
-    ordem: number,
-  ) {
-    const busyKey = `${tarefaId}:${cenarioId}:upload`
-    setBusyScenarioKey(busyKey)
-    try {
-      const arquivoDataUrl = await fileToDataUrl(file)
-      await createDemandaCenarioEvidencia(demandaId, tarefaId, cenarioId, {
-        nomeArquivo: file.name,
-        arquivoDataUrl,
-        legenda,
-        ordem,
-      })
-      setMessage('Evidencia anexada com sucesso.')
-      await refreshDetail()
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Nao foi possivel anexar a evidencia.')
-    } finally {
-      setBusyScenarioKey('')
-    }
-  }
-
-  async function handleDeleteEvidence(tarefaId: string, cenarioId: string, evidenciaId: string) {
-    if (!window.confirm('Deseja remover esta evidencia do cenario?')) return
-    const busyKey = `${tarefaId}:${cenarioId}:${evidenciaId}`
-    setBusyScenarioKey(busyKey)
-    try {
-      await deleteDemandaCenarioEvidencia(demandaId, tarefaId, cenarioId, evidenciaId)
-      setMessage('Evidencia removida com sucesso.')
-      await refreshDetail()
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Nao foi possivel remover a evidencia.')
-    } finally {
-      setBusyScenarioKey('')
+      setBusyScenarioId('')
     }
   }
 
@@ -374,7 +275,7 @@ export function DemandaDetailPage() {
       <SectionHeader
         eyebrow="Demandas"
         title={detail.titulo}
-        description="A demanda agora fica distribuida em uma leitura mais operacional: cabecalho no topo, criacao de tarefa logo abaixo e arvore completa preenchendo a tela com tarefas expansivas."
+        description="Estrutura em arvore: demanda no topo, tarefas expansivas no corpo e cenarios empilhados dentro de cada tarefa."
         action={<Button variant="secondary" onClick={() => navigate('/demandas')}>Voltar para lista</Button>}
       />
 
@@ -457,7 +358,7 @@ export function DemandaDetailPage() {
 
         <div className="grid gap-4 xl:grid-cols-[1fr,1fr,220px,220px,180px,140px] xl:items-end">
           <Field label="Titulo">
-            <Input value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} placeholder="Ex.: Portal Config" />
+            <Input value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} placeholder="Ex.: Diario de classe" />
           </Field>
 
           <Field label="Descricao">
@@ -519,7 +420,7 @@ export function DemandaDetailPage() {
             <p className="text-sm text-muted">Arvore da demanda</p>
             <h2 className="font-display text-2xl font-bold text-foreground">Demanda &gt; Tarefas &gt; Cenarios &gt; Bugs</h2>
             <p className="mt-2 text-sm text-muted">
-              As tarefas agora ficam uma embaixo da outra, preenchendo a tela e com expansao propria. Dentro de cada ramo, os cenarios e evidencias continuam editaveis.
+              Os cenarios agora ficam em lista um abaixo do outro. Ao abrir um item, voce ve o resumo e entra na tela dedicada para editar GIF, quadros e evidencias.
             </p>
           </div>
           <span className="rounded-full border border-accent/20 bg-accent/8 px-3 py-1 text-xs font-semibold text-foreground">
@@ -528,41 +429,27 @@ export function DemandaDetailPage() {
         </div>
 
         <div className="space-y-5">
-          <div className="rounded-3xl border border-accent/20 bg-accent/6 p-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-                Demanda
-              </span>
-              <p className="font-display text-2xl font-bold text-foreground">{detail.titulo}</p>
-              <StatusBadge value={detail.status} />
-              <StatusBadge value={detail.prioridade} />
-            </div>
-            {detail.descricao ? <p className="mt-3 text-sm text-muted">{detail.descricao}</p> : null}
-          </div>
-
           {detail.tarefas.length > 0 ? (
-            detail.tarefas
-              .slice()
-              .sort((left, right) => left.ordem - right.ordem)
-              .map((task) => (
-                <TaskTreeCard
-                  key={task.id}
-                  task={task}
-                  modules={modules}
-                  portals={portals}
-                  busy={busyTaskId === task.id}
-                  busyScenarioKey={busyScenarioKey}
-                  expanded={expandedTaskIds.includes(task.id)}
-                  onToggle={() => toggleTask(task.id)}
-                  onSaveTask={(payload) => void handleSaveTask(task.id, payload)}
-                  onDeleteTask={() => void handleDeleteTask(task.id)}
-                  onCreateScenario={(payload) => void handleCreateScenario(task.id, payload)}
-                  onSaveScenario={(cenarioId, payload) => void handleSaveScenario(task.id, cenarioId, payload)}
-                  onDeleteScenario={(cenarioId) => void handleDeleteScenario(task.id, cenarioId)}
-                  onCreateEvidence={(cenarioId, file, legenda, ordem) => void handleCreateEvidence(task.id, cenarioId, file, legenda, ordem)}
-                  onDeleteEvidence={(cenarioId, evidenciaId) => void handleDeleteEvidence(task.id, cenarioId, evidenciaId)}
-                />
-              ))
+            detail.tarefas.map((task) => (
+              <TaskTreeCard
+                key={task.id}
+                demandaId={demandaId}
+                task={task}
+                modules={modules}
+                portals={portals}
+                busy={busyTaskId === task.id}
+                busyScenarioId={busyScenarioId}
+                expanded={expandedTaskIds.includes(task.id)}
+                expandedScenarioIds={expandedScenarioIds}
+                onToggle={() => toggleTask(task.id)}
+                onToggleScenario={toggleScenario}
+                onOpenScenario={(scenarioId) => navigate(`/demandas/${demandaId}/tarefas/${task.id}/cenarios/${scenarioId}`)}
+                onCreateScenario={() => navigate(`/demandas/${demandaId}/tarefas/${task.id}/cenarios/novo`)}
+                onSaveTask={(payload) => void handleSaveTask(task.id, payload)}
+                onDeleteTask={() => void handleDeleteTask(task.id)}
+                onDeleteScenario={(scenarioId) => void handleDeleteScenario(task.id, scenarioId)}
+              />
+            ))
           ) : (
             <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
               Nenhuma tarefa cadastrada ainda. Crie a primeira frente acima para montar a arvore da demanda.
@@ -575,58 +462,44 @@ export function DemandaDetailPage() {
 }
 
 function TaskTreeCard({
+  demandaId,
   task,
   modules,
   portals,
   busy,
-  busyScenarioKey,
+  busyScenarioId,
   expanded,
+  expandedScenarioIds,
   onToggle,
+  onToggleScenario,
+  onOpenScenario,
+  onCreateScenario,
   onSaveTask,
   onDeleteTask,
-  onCreateScenario,
-  onSaveScenario,
   onDeleteScenario,
-  onCreateEvidence,
-  onDeleteEvidence,
 }: {
+  demandaId: string
   task: DemandaTarefaRecord
   modules: Array<{ id: string; nome: string; portalId?: string; portalNome?: string }>
   portals: Array<{ id: string; nome: string }>
   busy: boolean
-  busyScenarioKey: string
+  busyScenarioId: string
   expanded: boolean
+  expandedScenarioIds: string[]
   onToggle: () => void
+  onToggleScenario: (scenarioId: string) => void
+  onOpenScenario: (scenarioId: string) => void
+  onCreateScenario: () => void
   onSaveTask: (payload: {
     titulo: string
     descricao: string
     portalId?: string
-    areaId?: string
     moduleId?: string
     status: string
     ordem: number
   }) => void
   onDeleteTask: () => void
-  onCreateScenario: (payload: {
-    titulo: string
-    descricao: string
-    tipo: DemandaCenarioTipo
-    status: DemandaCenarioStatus
-    observacoes: string
-  }) => void
-  onSaveScenario: (
-    cenarioId: string,
-    payload: {
-      titulo: string
-      descricao: string
-      tipo: DemandaCenarioTipo
-      status: DemandaCenarioStatus
-      observacoes: string
-    },
-  ) => void
-  onDeleteScenario: (cenarioId: string) => void
-  onCreateEvidence: (cenarioId: string, file: File, legenda: string, ordem: number) => void
-  onDeleteEvidence: (cenarioId: string, evidenciaId: string) => void
+  onDeleteScenario: (scenarioId: string) => void
 }) {
   const [titulo, setTitulo] = useState(task.titulo)
   const [descricao, setDescricao] = useState(task.descricao || '')
@@ -634,12 +507,6 @@ function TaskTreeCard({
   const [moduleId, setModuleId] = useState(task.moduleId || '')
   const [status, setStatus] = useState(task.status)
   const [ordem, setOrdem] = useState(String(task.ordem))
-
-  const [newScenarioTitle, setNewScenarioTitle] = useState('')
-  const [newScenarioDescription, setNewScenarioDescription] = useState('')
-  const [newScenarioType, setNewScenarioType] = useState<DemandaCenarioTipo>('auxiliar')
-  const [newScenarioStatus, setNewScenarioStatus] = useState<DemandaCenarioStatus>('parcial')
-  const [newScenarioNotes, setNewScenarioNotes] = useState('')
 
   useEffect(() => {
     setTitulo(task.titulo)
@@ -757,92 +624,23 @@ function TaskTreeCard({
                 <span className="text-xs uppercase tracking-[0.14em] text-muted">
                   {principalCount} principal / {Math.max(0, scenarioCount - principalCount)} auxiliares
                 </span>
+                <Button onClick={onCreateScenario}>Adicionar cenario</Button>
               </>
             }
           >
-            <Card className="space-y-4 border-border/70 bg-black/10">
-              <div className="grid gap-4 xl:grid-cols-[1.2fr,220px,180px] xl:items-end">
-                <Field label="Titulo do cenario">
-                  <Input
-                    value={newScenarioTitle}
-                    onChange={(event) => setNewScenarioTitle(event.target.value)}
-                    placeholder="Ex.: Parametro marcado"
-                  />
-                </Field>
-
-                <Field label="Tipo">
-                  <select
-                    value={newScenarioType}
-                    onChange={(event) => setNewScenarioType(event.target.value as DemandaCenarioTipo)}
-                    className={selectClass}
-                  >
-                    <option value="auxiliar">Auxiliar</option>
-                    <option value="principal">Principal</option>
-                  </select>
-                </Field>
-
-                <Field label="Status">
-                  <select
-                    value={newScenarioStatus}
-                    onChange={(event) => setNewScenarioStatus(event.target.value as DemandaCenarioStatus)}
-                    className={selectClass}
-                  >
-                    <option value="parcial">Parcial</option>
-                    <option value="passou">Passou</option>
-                    <option value="falhou">Falhou</option>
-                  </select>
-                </Field>
-              </div>
-
-              <div className="grid gap-4 xl:grid-cols-2">
-                <Field label="Descricao">
-                  <textarea
-                    value={newScenarioDescription}
-                    onChange={(event) => setNewScenarioDescription(event.target.value)}
-                    className={textareaClass}
-                    placeholder="Descreva rapidamente o fluxo validado neste cenario."
-                  />
-                </Field>
-
-                <Field label="Observacoes">
-                  <textarea
-                    value={newScenarioNotes}
-                    onChange={(event) => setNewScenarioNotes(event.target.value)}
-                    className={textareaClass}
-                    placeholder="Opcional"
-                  />
-                </Field>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={() =>
-                    onCreateScenario({
-                      titulo: newScenarioTitle,
-                      descricao: newScenarioDescription,
-                      tipo: newScenarioType,
-                      status: newScenarioStatus,
-                      observacoes: newScenarioNotes,
-                    })
-                  }
-                  disabled={busyScenarioKey === `${task.id}:create`}
-                >
-                  {busyScenarioKey === `${task.id}:create` ? 'Adicionando...' : 'Adicionar cenario'}
-                </Button>
-              </div>
-            </Card>
-
             {task.cenarios && task.cenarios.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {task.cenarios.map((scenario) => (
-                  <ScenarioTreeCard
+                  <ScenarioSummaryCard
                     key={scenario.id}
+                    demandaId={demandaId}
+                    taskId={task.id}
                     scenario={scenario}
-                    busy={busyScenarioKey.startsWith(`${task.id}:${scenario.id}`)}
-                    onSave={(payload) => onSaveScenario(scenario.id, payload)}
+                    expanded={expandedScenarioIds.includes(scenario.id)}
+                    busy={busyScenarioId === scenario.id}
+                    onToggle={() => onToggleScenario(scenario.id)}
+                    onOpen={() => onOpenScenario(scenario.id)}
                     onDelete={() => onDeleteScenario(scenario.id)}
-                    onCreateEvidence={(file, legenda, evidenceOrder) => onCreateEvidence(scenario.id, file, legenda, evidenceOrder)}
-                    onDeleteEvidence={(evidenciaId) => onDeleteEvidence(scenario.id, evidenciaId)}
                   />
                 ))}
               </div>
@@ -858,7 +656,7 @@ function TaskTreeCard({
             meta={<span className="text-xs uppercase tracking-[0.14em] text-muted">Em breve</span>}
           >
             <div className="rounded-2xl border border-dashed border-border bg-white/[0.02] px-4 py-4 text-sm text-muted">
-              Esta coluna da arvore ja foi reservada para bugs vinculados por tarefa/cenario, mas a integracao ainda nao foi ativada nesta etapa.
+              Esta ramificacao ja foi reservada para bugs vinculados por tarefa/cenario, mas a integracao ainda nao foi ativada nesta etapa.
             </div>
           </TreeNode>
         </Card>
@@ -867,192 +665,80 @@ function TaskTreeCard({
   )
 }
 
-function ScenarioTreeCard({
+function ScenarioSummaryCard({
   scenario,
+  expanded,
   busy,
-  onSave,
+  onToggle,
+  onOpen,
   onDelete,
-  onCreateEvidence,
-  onDeleteEvidence,
 }: {
+  demandaId: string
+  taskId: string
   scenario: DemandaCenarioRecord
+  expanded: boolean
   busy: boolean
-  onSave: (payload: {
-    titulo: string
-    descricao: string
-    tipo: DemandaCenarioTipo
-    status: DemandaCenarioStatus
-    observacoes: string
-  }) => void
+  onToggle: () => void
+  onOpen: () => void
   onDelete: () => void
-  onCreateEvidence: (file: File, legenda: string, ordem: number) => void
-  onDeleteEvidence: (evidenciaId: string) => void
 }) {
-  const [titulo, setTitulo] = useState(scenario.titulo)
-  const [descricao, setDescricao] = useState(scenario.descricao || '')
-  const [tipo, setTipo] = useState<DemandaCenarioTipo>(scenario.tipo)
-  const [status, setStatus] = useState<DemandaCenarioStatus>(scenario.status)
-  const [observacoes, setObservacoes] = useState(scenario.observacoes || '')
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [legenda, setLegenda] = useState('')
-  const [ordem, setOrdem] = useState(String((scenario.evidencias?.length || 0) + 1))
-
-  useEffect(() => {
-    setTitulo(scenario.titulo)
-    setDescricao(scenario.descricao || '')
-    setTipo(scenario.tipo)
-    setStatus(scenario.status)
-    setObservacoes(scenario.observacoes || '')
-  }, [scenario.id, scenario.titulo, scenario.descricao, scenario.tipo, scenario.status, scenario.observacoes])
-
-  const isUploading = busy && selectedFile !== null
-
   return (
     <TreeNode
       label={scenario.tipo === 'principal' ? 'Cenario principal' : 'Cenario auxiliar'}
       meta={
         <>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="rounded-full border border-border bg-black/20 px-3 py-1 text-xs font-semibold text-foreground transition hover:border-accent/35"
+          >
+            {expanded ? 'Recolher' : 'Expandir'}
+          </button>
           <span className="text-sm font-semibold text-foreground">{scenario.titulo}</span>
           <StatusBadge value={scenario.status} />
+          <span className="text-xs uppercase tracking-[0.14em] text-muted">
+            {(scenario.evidencias?.length || 0)} evidencia(s) / {(scenario.frames?.length || 0)} quadro(s)
+          </span>
         </>
       }
     >
-      <Card className="space-y-4 border-border/70 bg-black/10">
-        <div className="grid gap-4 xl:grid-cols-[1.25fr,220px,180px] xl:items-end">
-          <Field label="Titulo">
-            <Input value={titulo} onChange={(event) => setTitulo(event.target.value)} />
-          </Field>
-
-          <Field label="Tipo">
-            <select value={tipo} onChange={(event) => setTipo(event.target.value as DemandaCenarioTipo)} className={selectClass}>
-              <option value="principal">Principal</option>
-              <option value="auxiliar">Auxiliar</option>
-            </select>
-          </Field>
-
-          <Field label="Status">
-            <select value={status} onChange={(event) => setStatus(event.target.value as DemandaCenarioStatus)} className={selectClass}>
-              <option value="passou">Passou</option>
-              <option value="falhou">Falhou</option>
-              <option value="parcial">Parcial</option>
-            </select>
-          </Field>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          <Field label="Descricao">
-            <textarea
-              value={descricao}
-              onChange={(event) => setDescricao(event.target.value)}
-              className={textareaClass}
-              placeholder="Descreva o fluxo validado neste cenario."
-            />
-          </Field>
-
-          <Field label="Observacoes">
-            <textarea
-              value={observacoes}
-              onChange={(event) => setObservacoes(event.target.value)}
-              className={textareaClass}
-              placeholder="Observacoes do QA"
-            />
-          </Field>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Button onClick={() => onSave({ titulo, descricao, tipo, status, observacoes })} disabled={busy}>
-            {busy ? 'Salvando...' : 'Salvar cenario'}
-          </Button>
-          <Button variant="secondary" onClick={onDelete} disabled={busy}>
-            Excluir cenario
-          </Button>
-        </div>
-
-        <TreeNode
-          label="Evidencias"
-          meta={
-            <span className="text-xs uppercase tracking-[0.14em] text-muted">
-              {(scenario.evidencias?.length || 0)} item(ns)
-            </span>
-          }
-        >
-          <Card className="space-y-4 border-border/70 bg-black/10">
-            <div className="grid gap-4 xl:grid-cols-[1fr,1fr,140px,auto] xl:items-end">
-              <Field label="Arquivo">
-                <Input type="file" onChange={(event) => setSelectedFile(event.target.files?.[0] || null)} />
-              </Field>
-
-              <Field label="Legenda">
-                <Input value={legenda} onChange={(event) => setLegenda(event.target.value)} placeholder="Opcional" />
-              </Field>
-
-              <Field label="Ordem">
-                <Input value={ordem} onChange={(event) => setOrdem(event.target.value)} />
-              </Field>
-
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={() => {
-                    if (!selectedFile) return
-                    onCreateEvidence(selectedFile, legenda, Number(ordem || 1))
-                    setSelectedFile(null)
-                    setLegenda('')
-                    setOrdem(String((scenario.evidencias?.length || 0) + 2))
-                  }}
-                  disabled={!selectedFile || isUploading}
-                >
-                  {isUploading ? 'Enviando...' : 'Adicionar evidencia'}
-                </Button>
-              </div>
+      {expanded ? (
+        <Card className="space-y-4 border-border/70 bg-black/10">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="rounded-2xl border border-border bg-white/[0.02] p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-muted">Descricao</p>
+              <p className="mt-2 text-sm text-foreground">{scenario.descricao || 'Sem descricao informada.'}</p>
             </div>
-          </Card>
-
-          {scenario.evidencias && scenario.evidencias.length > 0 ? (
-            <div className="space-y-3">
-              {scenario.evidencias.map((evidence) => {
-                const isImage = evidence.tipoArquivo?.toLowerCase().startsWith('image/')
-                return (
-                  <div key={evidence.id} className="rounded-2xl border border-border bg-white/[0.02] p-4">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                      <div className="space-y-2">
-                        <p className="font-semibold text-foreground">{evidence.nomeArquivo}</p>
-                        <p className="text-xs uppercase tracking-[0.14em] text-muted">
-                          Criado em {new Date(evidence.createdAt).toLocaleString('pt-BR')}
-                        </p>
-                        {evidence.legenda ? <p className="text-sm text-muted">{evidence.legenda}</p> : null}
-                      </div>
-
-                      <div className="flex flex-wrap gap-3">
-                        <a
-                          href={evidence.urlArquivo}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex h-10 items-center justify-center rounded-2xl border border-accent/25 bg-accent/8 px-4 text-sm font-semibold text-foreground transition hover:border-accent/45"
-                        >
-                          Abrir
-                        </a>
-                        <Button variant="secondary" onClick={() => onDeleteEvidence(evidence.id)} disabled={busy}>
-                          Excluir
-                        </Button>
-                      </div>
-                    </div>
-
-                    {isImage ? (
-                      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-black/20">
-                        <img src={evidence.urlArquivo} alt={evidence.nomeArquivo} className="max-h-80 w-full object-contain" />
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              })}
+            <div className="rounded-2xl border border-border bg-white/[0.02] p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-muted">Observacoes</p>
+              <p className="mt-2 text-sm text-foreground">{scenario.observacoes || 'Sem observacoes informadas.'}</p>
             </div>
-          ) : (
-            <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
-              Nenhuma evidencia cadastrada neste cenario.
-            </div>
-          )}
-        </TreeNode>
-      </Card>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-4">
+            <InfoPill label="Tipo" value={scenario.tipo === 'principal' ? 'Principal' : 'Auxiliar'} />
+            <InfoPill label="Status" value={scenario.status} />
+            <InfoPill label="Evidencias" value={String(scenario.evidencias?.length || 0)} />
+            <InfoPill label="Quadros" value={String(scenario.frames?.length || 0)} />
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={onOpen}>Abrir cenario</Button>
+            <Button variant="secondary" onClick={onDelete} disabled={busy}>
+              {busy ? 'Excluindo...' : 'Excluir cenario'}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
     </TreeNode>
+  )
+}
+
+function InfoPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3">
+      <p className="text-xs uppercase tracking-[0.16em] text-muted">{label}</p>
+      <p className="mt-2 font-semibold text-foreground">{value}</p>
+    </div>
   )
 }

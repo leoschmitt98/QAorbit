@@ -517,6 +517,9 @@ export interface DemandaCenarioRecord {
   createdByUserId?: string
   createdAt: string
   updatedAt: string
+  gifName?: string
+  gifPreviewUrl?: string
+  frames?: RetestFrame[]
   evidencias?: DemandaCenarioEvidenciaRecord[]
 }
 
