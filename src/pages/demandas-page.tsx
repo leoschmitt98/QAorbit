@@ -10,7 +10,7 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { useProjectScope } from '@/hooks/use-project-scope'
 import { useWorkspaceScope } from '@/hooks/use-workspace-scope'
 import { useCatalogProjectsQuery } from '@/services/catalog-api'
-import { createDemanda, useDemandasQuery } from '@/services/demandas-api'
+import { createDemanda, deleteDemanda, useDemandasQuery } from '@/services/demandas-api'
 
 export function DemandasPage() {
   const { selectedProjectId } = useProjectScope()
@@ -27,6 +27,7 @@ export function DemandasPage() {
   const [responsavelId, setResponsavelId] = useState('')
   const [message, setMessage] = useState('Cadastre demandas evolutivas separadamente dos chamados, com tarefas internas de validacao e escopo.')
   const [isCreating, setIsCreating] = useState(false)
+  const [busyDeleteId, setBusyDeleteId] = useState('')
 
   const records = (demandasQuery.data ?? []).filter((record) =>
     selectedProjectId ? record.projectId === selectedProjectId : true,
@@ -61,6 +62,21 @@ export function DemandasPage() {
       setMessage(error instanceof Error ? error.message : 'Nao foi possivel criar a demanda.')
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  async function handleDeleteDemanda(demandaId: string, demandaTitulo: string) {
+    if (!window.confirm(`Deseja excluir a demanda "${demandaTitulo}"?`)) return
+
+    setBusyDeleteId(demandaId)
+    try {
+      await deleteDemanda(demandaId)
+      setMessage(`Demanda ${demandaTitulo} excluida com sucesso.`)
+      await queryClient.invalidateQueries({ queryKey: ['demandas'] })
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir a demanda.')
+    } finally {
+      setBusyDeleteId('')
     }
   }
 
@@ -167,31 +183,50 @@ export function DemandasPage() {
           {records.length > 0 ? (
             <div className="space-y-3">
               {records.map((record) => (
-                <Link
+                <div
                   key={record.id}
-                  to={`/demandas/${record.id}`}
-                  className="block rounded-2xl border border-border bg-white/[0.02] px-4 py-3 transition hover:border-accent/25"
+                  className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 transition hover:border-accent/25"
                 >
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <p className="font-semibold text-foreground">{record.titulo}</p>
-                      <p className="mt-1 text-sm text-muted">{record.projectName || 'Projeto nao informado'}</p>
-                      <p className="mt-2 text-sm text-muted line-clamp-2">{record.descricao || 'Sem descricao informada.'}</p>
-                      {record.ownerName ? (
-                        <p className="mt-2 text-xs uppercase tracking-[0.16em] text-muted">QA responsavel: {record.ownerName}</p>
-                      ) : null}
-                    </div>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <Link to={`/demandas/${record.id}`} className="block min-w-0 flex-1">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <p className="font-semibold text-foreground">{record.titulo}</p>
+                          <p className="mt-1 text-sm text-muted">{record.projectName || 'Projeto nao informado'}</p>
+                          <p className="mt-2 text-sm text-muted line-clamp-2">{record.descricao || 'Sem descricao informada.'}</p>
+                          {record.ownerName ? (
+                            <p className="mt-2 text-xs uppercase tracking-[0.16em] text-muted">QA responsavel: {record.ownerName}</p>
+                          ) : null}
+                        </div>
 
-                    <div className="text-right text-sm text-muted">
-                      <div className="flex justify-end gap-2">
-                        <StatusBadge value={record.status} />
-                        <StatusBadge value={record.prioridade} />
+                        <div className="text-right text-sm text-muted">
+                          <div className="flex justify-end gap-2">
+                            <StatusBadge value={record.status} />
+                            <StatusBadge value={record.prioridade} />
+                          </div>
+                          <p className="mt-2">{record.tarefasCount} tarefa(s)</p>
+                          <p>{new Date(record.updatedAt).toLocaleString('pt-BR')}</p>
+                        </div>
                       </div>
-                      <p className="mt-2">{record.tarefasCount} tarefa(s)</p>
-                      <p>{new Date(record.updatedAt).toLocaleString('pt-BR')}</p>
+                    </Link>
+
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <Link
+                        to={`/demandas/${record.id}`}
+                        className="inline-flex h-11 items-center justify-center rounded-2xl border border-border bg-white/5 px-5 text-sm font-semibold text-foreground transition hover:border-accent/30 hover:bg-white/10"
+                      >
+                        Abrir
+                      </Link>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void handleDeleteDemanda(record.id, record.titulo)}
+                        disabled={busyDeleteId === record.id}
+                      >
+                        {busyDeleteId === record.id ? 'Excluindo...' : 'Excluir'}
+                      </Button>
                     </div>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           ) : (
