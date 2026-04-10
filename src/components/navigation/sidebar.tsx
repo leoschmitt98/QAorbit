@@ -1,6 +1,7 @@
 import {
   Bot,
   Bug,
+  ClipboardList,
   FileStack,
   FolderKanban,
   History,
@@ -19,6 +20,7 @@ const items = [
   { to: '/flows/history', label: 'Historico de Fluxos', icon: History },
   { to: '/historical-tests', label: 'Historico de Testes', icon: History },
   { to: '/projects', label: 'Projetos', icon: FolderKanban },
+  { to: '/demandas', label: 'Demandas', icon: ClipboardList },
   { to: '/functional-base', label: 'Base Funcional', icon: FileStack },
   { to: '/test-plans', label: 'Test Plans', icon: ListChecks },
   { to: '/bugs', label: 'Bugs / Chamados', icon: Bug },

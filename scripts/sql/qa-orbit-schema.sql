@@ -576,6 +576,97 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('dbo.Demandas', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.Demandas (
+    Id NVARCHAR(120) NOT NULL PRIMARY KEY,
+    Titulo NVARCHAR(250) NOT NULL,
+    Descricao NVARCHAR(MAX) NULL,
+    ProjetoId INT NOT NULL,
+    Status NVARCHAR(40) NOT NULL CONSTRAINT DF_Demandas_Status DEFAULT ('Rascunho'),
+    Prioridade NVARCHAR(30) NOT NULL CONSTRAINT DF_Demandas_Prioridade DEFAULT ('Media'),
+    ResponsavelId NVARCHAR(120) NULL,
+    CriadoPorUsuarioId NVARCHAR(120) NULL,
+    CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_Demandas_CriadoEm DEFAULT (SYSDATETIME()),
+    AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_Demandas_AtualizadoEm DEFAULT (SYSDATETIME()),
+    CONSTRAINT FK_Demandas_Projetos FOREIGN KEY (ProjetoId) REFERENCES dbo.Projetos (Id)
+  );
+
+  CREATE INDEX IX_Demandas_ProjetoId ON dbo.Demandas (ProjetoId);
+  CREATE INDEX IX_Demandas_Status ON dbo.Demandas (Status);
+  CREATE INDEX IX_Demandas_CriadoPorUsuarioId ON dbo.Demandas (CriadoPorUsuarioId);
+END
+GO
+
+IF OBJECT_ID('dbo.DemandaTarefas', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.DemandaTarefas (
+    Id NVARCHAR(120) NOT NULL PRIMARY KEY,
+    DemandaId NVARCHAR(120) NOT NULL,
+    Titulo NVARCHAR(250) NOT NULL,
+    Descricao NVARCHAR(MAX) NULL,
+    AreaId INT NULL,
+    ModuloId INT NULL,
+    Status NVARCHAR(40) NOT NULL CONSTRAINT DF_DemandaTarefas_Status DEFAULT ('Pendente'),
+    Ordem INT NOT NULL CONSTRAINT DF_DemandaTarefas_Ordem DEFAULT (1),
+    CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaTarefas_CriadoEm DEFAULT (SYSDATETIME()),
+    AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaTarefas_AtualizadoEm DEFAULT (SYSDATETIME()),
+    CONSTRAINT FK_DemandaTarefas_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id) ON DELETE CASCADE,
+    CONSTRAINT FK_DemandaTarefas_Areas FOREIGN KEY (AreaId) REFERENCES dbo.Areas (Id),
+    CONSTRAINT FK_DemandaTarefas_Modulos FOREIGN KEY (ModuloId) REFERENCES dbo.Modulos (Id)
+  );
+
+  CREATE INDEX IX_DemandaTarefas_DemandaId ON dbo.DemandaTarefas (DemandaId, Ordem);
+END
+GO
+
+IF OBJECT_ID('dbo.DemandaCenarios', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.DemandaCenarios (
+    Id NVARCHAR(120) NOT NULL PRIMARY KEY,
+    DemandaId NVARCHAR(120) NOT NULL,
+    DemandaTarefaId NVARCHAR(120) NOT NULL,
+    Titulo NVARCHAR(250) NOT NULL,
+    Descricao NVARCHAR(MAX) NULL,
+    Tipo NVARCHAR(20) NOT NULL CONSTRAINT DF_DemandaCenarios_Tipo DEFAULT ('auxiliar'),
+    Status NVARCHAR(20) NOT NULL CONSTRAINT DF_DemandaCenarios_Status DEFAULT ('parcial'),
+    Observacoes NVARCHAR(MAX) NULL,
+    CriadoPorUsuarioId NVARCHAR(120) NULL,
+    CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarios_CriadoEm DEFAULT (SYSDATETIME()),
+    AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarios_AtualizadoEm DEFAULT (SYSDATETIME()),
+    CONSTRAINT FK_DemandaCenarios_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id) ON DELETE CASCADE,
+    CONSTRAINT FK_DemandaCenarios_Tarefas FOREIGN KEY (DemandaTarefaId) REFERENCES dbo.DemandaTarefas (Id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IX_DemandaCenarios_TarefaId ON dbo.DemandaCenarios (DemandaTarefaId, Tipo, CriadoEm);
+  CREATE INDEX IX_DemandaCenarios_DemandaId ON dbo.DemandaCenarios (DemandaId);
+END
+GO
+
+IF OBJECT_ID('dbo.DemandaCenarioEvidencias', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.DemandaCenarioEvidencias (
+    Id NVARCHAR(120) NOT NULL PRIMARY KEY,
+    DemandaId NVARCHAR(120) NOT NULL,
+    DemandaTarefaId NVARCHAR(120) NOT NULL,
+    DemandaCenarioId NVARCHAR(120) NOT NULL,
+    NomeArquivo NVARCHAR(260) NOT NULL,
+    CaminhoArquivo NVARCHAR(500) NOT NULL,
+    TipoArquivo NVARCHAR(120) NULL,
+    Legenda NVARCHAR(MAX) NULL,
+    Ordem INT NOT NULL CONSTRAINT DF_DemandaCenarioEvidencias_Ordem DEFAULT (1),
+    CriadoPorUsuarioId NVARCHAR(120) NULL,
+    CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarioEvidencias_CriadoEm DEFAULT (SYSDATETIME()),
+    AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarioEvidencias_AtualizadoEm DEFAULT (SYSDATETIME()),
+    CONSTRAINT FK_DemandaCenarioEvidencias_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id) ON DELETE CASCADE,
+    CONSTRAINT FK_DemandaCenarioEvidencias_Tarefas FOREIGN KEY (DemandaTarefaId) REFERENCES dbo.DemandaTarefas (Id) ON DELETE CASCADE,
+    CONSTRAINT FK_DemandaCenarioEvidencias_Cenarios FOREIGN KEY (DemandaCenarioId) REFERENCES dbo.DemandaCenarios (Id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IX_DemandaCenarioEvidencias_CenarioId ON dbo.DemandaCenarioEvidencias (DemandaCenarioId, Ordem, CriadoEm);
+END
+GO
+
 IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'Aluno')
   INSERT INTO dbo.Areas (Nome) VALUES ('Aluno');
 IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'Professor')

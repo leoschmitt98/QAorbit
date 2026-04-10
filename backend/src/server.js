@@ -6,6 +6,7 @@ import areasRouter from './routes/areas.js'
 import authRouter from './routes/auth.js'
 import bugsRouter from './routes/bugs.js'
 import chamadosRouter from './routes/chamados.js'
+import demandasRouter from './routes/demandas.js'
 import documentosFuncionaisRouter from './routes/documentos-funcionais.js'
 import evidenciasRouter from './routes/evidencias.js'
 import historicoTestesRouter from './routes/historico-testes.js'
@@ -38,6 +39,7 @@ app.use('/api/projeto-portais', projetoPortaisRouter)
 app.use('/api/modulos', modulosRouter)
 app.use('/api/areas', areasRouter)
 app.use('/api/chamados', chamadosRouter)
+app.use('/api/demandas', demandasRouter)
 app.use('/api/documentos-funcionais', documentosFuncionaisRouter)
 app.use('/api/test-plans', testPlansRouter)
 app.use('/api/bugs', bugsRouter)

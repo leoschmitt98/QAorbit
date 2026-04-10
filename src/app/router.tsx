@@ -5,6 +5,8 @@ import { BugDetailPage } from '@/pages/bug-detail-page'
 import { BugsPage } from '@/pages/bugs-page'
 import { CentralAgentsPage } from '@/pages/central-agents-page'
 import { DashboardPage } from '@/pages/dashboard-page'
+import { DemandaDetailPage } from '@/pages/demanda-detail-page'
+import { DemandasPage } from '@/pages/demandas-page'
 import { DocumentDetailPage } from '@/pages/document-detail-page'
 import { EvidencePage } from '@/pages/evidence-page'
 import { ExecutionDetailPage } from '@/pages/execution-detail-page'
@@ -53,6 +55,8 @@ const router = createBrowserRouter([
       { path: 'historical-tests/:recordId', element: <HistoricalTestDetailPage /> },
       { path: 'projects', element: <ProjectsPage /> },
       { path: 'projects/:projectId', element: <ProjectDetailPage /> },
+      { path: 'demandas', element: <DemandasPage /> },
+      { path: 'demandas/:demandaId', element: <DemandaDetailPage /> },
       { path: 'functional-base', element: <FunctionalBasePage /> },
       { path: 'functional-base/:documentId', element: <DocumentDetailPage /> },
       { path: 'test-plans', element: <TestPlansPage /> },

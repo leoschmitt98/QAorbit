@@ -464,3 +464,76 @@ export interface TestPlanStepRecord {
 export interface TestPlanDetail extends TestPlanRecord {
   steps: TestPlanStepRecord[]
 }
+
+export type DemandaStatus = 'Rascunho' | 'Em andamento' | 'Concluida'
+export type DemandaPrioridade = 'Baixa' | 'Media' | 'Alta'
+export type DemandaTarefaStatus = 'Pendente' | 'Em validacao' | 'Concluida'
+export type DemandaCenarioTipo = 'principal' | 'auxiliar'
+export type DemandaCenarioStatus = 'passou' | 'falhou' | 'parcial'
+
+export interface DemandaRecord {
+  id: string
+  titulo: string
+  descricao: string
+  projectId: string
+  projectName?: string
+  status: DemandaStatus
+  prioridade: DemandaPrioridade
+  responsavelId?: string
+  createdByUserId?: string
+  ownerName?: string
+  createdAt: string
+  updatedAt: string
+  tarefasCount: number
+}
+
+export interface DemandaTarefaRecord {
+  id: string
+  demandaId: string
+  titulo: string
+  descricao: string
+  areaId?: string
+  areaName?: string
+  moduleId?: string
+  moduleName?: string
+  status: DemandaTarefaStatus
+  ordem: number
+  createdAt: string
+  updatedAt: string
+  cenarios?: DemandaCenarioRecord[]
+}
+
+export interface DemandaCenarioRecord {
+  id: string
+  demandaId: string
+  demandaTarefaId: string
+  titulo: string
+  descricao: string
+  tipo: DemandaCenarioTipo
+  status: DemandaCenarioStatus
+  observacoes: string
+  createdByUserId?: string
+  createdAt: string
+  updatedAt: string
+  evidencias?: DemandaCenarioEvidenciaRecord[]
+}
+
+export interface DemandaCenarioEvidenciaRecord {
+  id: string
+  demandaId: string
+  demandaTarefaId: string
+  demandaCenarioId: string
+  nomeArquivo: string
+  caminhoArquivo: string
+  urlArquivo: string
+  tipoArquivo: string
+  legenda: string
+  ordem: number
+  createdByUserId?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DemandaDetail extends DemandaRecord {
+  tarefas: DemandaTarefaRecord[]
+}
