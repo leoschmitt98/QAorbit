@@ -605,6 +605,7 @@ BEGIN
     DemandaId NVARCHAR(120) NOT NULL,
     Titulo NVARCHAR(250) NOT NULL,
     Descricao NVARCHAR(MAX) NULL,
+    PortalId INT NULL,
     AreaId INT NULL,
     ModuloId INT NULL,
     Status NVARCHAR(40) NOT NULL CONSTRAINT DF_DemandaTarefas_Status DEFAULT ('Pendente'),
@@ -612,11 +613,36 @@ BEGIN
     CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaTarefas_CriadoEm DEFAULT (SYSDATETIME()),
     AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaTarefas_AtualizadoEm DEFAULT (SYSDATETIME()),
     CONSTRAINT FK_DemandaTarefas_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id) ON DELETE CASCADE,
+    CONSTRAINT FK_DemandaTarefas_ProjetoPortais FOREIGN KEY (PortalId) REFERENCES dbo.ProjetoPortais (Id),
     CONSTRAINT FK_DemandaTarefas_Areas FOREIGN KEY (AreaId) REFERENCES dbo.Areas (Id),
     CONSTRAINT FK_DemandaTarefas_Modulos FOREIGN KEY (ModuloId) REFERENCES dbo.Modulos (Id)
   );
 
   CREATE INDEX IX_DemandaTarefas_DemandaId ON dbo.DemandaTarefas (DemandaId, Ordem);
+END
+GO
+
+IF COL_LENGTH('dbo.DemandaTarefas', 'PortalId') IS NULL
+BEGIN
+  ALTER TABLE dbo.DemandaTarefas ADD PortalId INT NULL;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_DemandaTarefas_ProjetoPortais')
+BEGIN
+  ALTER TABLE dbo.DemandaTarefas
+  ADD CONSTRAINT FK_DemandaTarefas_ProjetoPortais FOREIGN KEY (PortalId) REFERENCES dbo.ProjetoPortais (Id);
+END
+GO
+
+IF NOT EXISTS (
+  SELECT 1
+  FROM sys.indexes
+  WHERE name = 'IX_DemandaTarefas_PortalId'
+    AND object_id = OBJECT_ID('dbo.DemandaTarefas')
+)
+BEGIN
+  CREATE INDEX IX_DemandaTarefas_PortalId ON dbo.DemandaTarefas (PortalId);
 END
 GO
 
@@ -634,7 +660,7 @@ BEGIN
     CriadoPorUsuarioId NVARCHAR(120) NULL,
     CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarios_CriadoEm DEFAULT (SYSDATETIME()),
     AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarios_AtualizadoEm DEFAULT (SYSDATETIME()),
-    CONSTRAINT FK_DemandaCenarios_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id) ON DELETE CASCADE,
+    CONSTRAINT FK_DemandaCenarios_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id),
     CONSTRAINT FK_DemandaCenarios_Tarefas FOREIGN KEY (DemandaTarefaId) REFERENCES dbo.DemandaTarefas (Id) ON DELETE CASCADE
   );
 
@@ -658,8 +684,8 @@ BEGIN
     CriadoPorUsuarioId NVARCHAR(120) NULL,
     CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarioEvidencias_CriadoEm DEFAULT (SYSDATETIME()),
     AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarioEvidencias_AtualizadoEm DEFAULT (SYSDATETIME()),
-    CONSTRAINT FK_DemandaCenarioEvidencias_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id) ON DELETE CASCADE,
-    CONSTRAINT FK_DemandaCenarioEvidencias_Tarefas FOREIGN KEY (DemandaTarefaId) REFERENCES dbo.DemandaTarefas (Id) ON DELETE CASCADE,
+    CONSTRAINT FK_DemandaCenarioEvidencias_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id),
+    CONSTRAINT FK_DemandaCenarioEvidencias_Tarefas FOREIGN KEY (DemandaTarefaId) REFERENCES dbo.DemandaTarefas (Id),
     CONSTRAINT FK_DemandaCenarioEvidencias_Cenarios FOREIGN KEY (DemandaCenarioId) REFERENCES dbo.DemandaCenarios (Id) ON DELETE CASCADE
   );
 

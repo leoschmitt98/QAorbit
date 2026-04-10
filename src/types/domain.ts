@@ -492,6 +492,8 @@ export interface DemandaTarefaRecord {
   demandaId: string
   titulo: string
   descricao: string
+  portalId?: string
+  portalName?: string
   areaId?: string
   areaName?: string
   moduleId?: string

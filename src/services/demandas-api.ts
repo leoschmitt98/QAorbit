@@ -31,6 +31,7 @@ export interface UpdateDemandaPayload {
 export interface CreateDemandaTarefaPayload {
   titulo: string
   descricao?: string
+  portalId?: string
   areaId?: string
   moduleId?: string
   status?: string
@@ -40,6 +41,7 @@ export interface CreateDemandaTarefaPayload {
 export interface UpdateDemandaTarefaPayload {
   titulo?: string
   descricao?: string
+  portalId?: string
   areaId?: string
   moduleId?: string
   status?: string
@@ -108,6 +110,14 @@ export async function updateDemanda(demandaId: string, payload: UpdateDemandaPay
   })
 
   return parseJson<DemandaRecord>(response)
+}
+
+export async function deleteDemanda(demandaId: string) {
+  const response = await fetch(`/api/demandas/${encodeURIComponent(demandaId)}`, {
+    method: 'DELETE',
+  })
+
+  return parseJson<{ ok: true }>(response)
 }
 
 export async function createDemandaTarefa(demandaId: string, payload: CreateDemandaTarefaPayload) {

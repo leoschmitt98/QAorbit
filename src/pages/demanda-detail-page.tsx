@@ -1,17 +1,22 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { LoadingState } from '@/components/shared/loading-state'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { useCatalogAreasQuery, useCatalogModulesQuery, useCatalogProjectsQuery } from '@/services/catalog-api'
+import {
+  useCatalogModulesQuery,
+  useCatalogProjectPortalsQuery,
+  useCatalogProjectsQuery,
+} from '@/services/catalog-api'
 import {
   createDemandaCenario,
   createDemandaCenarioEvidencia,
   createDemandaTarefa,
+  deleteDemanda,
   deleteDemandaCenario,
   deleteDemandaCenarioEvidencia,
   deleteDemandaTarefa,
@@ -20,10 +25,57 @@ import {
   updateDemandaTarefa,
   useDemandaDetailQuery,
 } from '@/services/demandas-api'
-import type { DemandaCenarioRecord, DemandaCenarioStatus, DemandaCenarioTipo } from '@/types/domain'
+import type {
+  DemandaCenarioRecord,
+  DemandaCenarioStatus,
+  DemandaCenarioTipo,
+  DemandaTarefaRecord,
+} from '@/types/domain'
 
-type TaskPayload = { titulo: string; descricao: string; areaId: string; moduleId: string; status: string; ordem: number }
-type ScenarioPayload = { titulo: string; descricao: string; tipo: string; status: string; observacoes: string }
+const selectClass =
+  'h-12 w-full rounded-2xl border border-border bg-black/20 px-4 text-sm text-foreground outline-none focus:border-accent/40'
+const textareaClass =
+  'min-h-[120px] w-full rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted/70 focus:border-accent/35'
+
+function Field({
+  label,
+  children,
+  helper,
+}: {
+  label: string
+  children: React.ReactNode
+  helper?: string
+}) {
+  return (
+    <label className="space-y-2">
+      <span className="text-sm font-semibold text-foreground">{label}</span>
+      {children}
+      {helper ? <span className="block text-xs text-muted">{helper}</span> : null}
+    </label>
+  )
+}
+
+function TreeNode({
+  label,
+  meta,
+  children,
+}: {
+  label: string
+  meta?: React.ReactNode
+  children?: React.ReactNode
+}) {
+  return (
+    <div className="relative pl-6">
+      <div className="absolute left-2 top-3 h-[calc(100%-0.5rem)] w-px bg-border" />
+      <div className="absolute left-2 top-3 h-px w-3 bg-border" />
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-white/[0.02] px-4 py-3">
+        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">{label}</span>
+        {meta ? <div className="flex flex-wrap items-center gap-2">{meta}</div> : null}
+      </div>
+      {children ? <div className="mt-4 space-y-4">{children}</div> : null}
+    </div>
+  )
+}
 
 async function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -40,131 +92,179 @@ export function DemandaDetailPage() {
   const queryClient = useQueryClient()
   const detailQuery = useDemandaDetailQuery(demandaId)
   const projectsQuery = useCatalogProjectsQuery()
-  const areasQuery = useCatalogAreasQuery()
+  const modulesQuery = useCatalogModulesQuery(detailQuery.data?.projectId || '')
+  const portalsQuery = useCatalogProjectPortalsQuery(detailQuery.data?.projectId || '')
+
   const [titulo, setTitulo] = useState('')
   const [descricao, setDescricao] = useState('')
   const [projectId, setProjectId] = useState('')
   const [status, setStatus] = useState('Rascunho')
   const [prioridade, setPrioridade] = useState('Media')
   const [responsavelId, setResponsavelId] = useState('')
+  const [message, setMessage] = useState(
+    'Estruture a demanda em formato de arvore: dados gerais no topo, tarefas expansivas no meio e cenarios/evidencias organizados dentro de cada frente.',
+  )
+
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskDescription, setNewTaskDescription] = useState('')
-  const [newTaskAreaId, setNewTaskAreaId] = useState('')
+  const [newTaskPortalId, setNewTaskPortalId] = useState('')
   const [newTaskModuleId, setNewTaskModuleId] = useState('')
   const [newTaskStatus, setNewTaskStatus] = useState('Pendente')
-  const [message, setMessage] = useState(
-    'Mantenha a demanda isolada dos chamados. Use as tarefas para dividir frentes por portal, modulo ou escopo de validacao.',
-  )
-  const [isSaving, setIsSaving] = useState(false)
-  const [isAddingTask, setIsAddingTask] = useState(false)
-  const [editingTaskId, setEditingTaskId] = useState('')
+  const [newTaskOrder, setNewTaskOrder] = useState('1')
+
+  const [isSavingDemand, setIsSavingDemand] = useState(false)
+  const [isDeletingDemand, setIsDeletingDemand] = useState(false)
+  const [isCreatingTask, setIsCreatingTask] = useState(false)
+  const [busyTaskId, setBusyTaskId] = useState('')
   const [busyScenarioKey, setBusyScenarioKey] = useState('')
-  const modulesQuery = useCatalogModulesQuery(projectId || detailQuery.data?.projectId || '')
+  const [expandedTaskIds, setExpandedTaskIds] = useState<string[]>([])
 
   useEffect(() => {
     if (!detailQuery.data) return
     setTitulo(detailQuery.data.titulo)
-    setDescricao(detailQuery.data.descricao)
+    setDescricao(detailQuery.data.descricao || '')
     setProjectId(detailQuery.data.projectId)
     setStatus(detailQuery.data.status)
     setPrioridade(detailQuery.data.prioridade)
     setResponsavelId(detailQuery.data.responsavelId || '')
   }, [detailQuery.data])
 
-  const areas = areasQuery.data ?? []
-  const projects = projectsQuery.data ?? []
-  const allModules = modulesQuery.data ?? []
-  const newTaskModules = useMemo(
-    () =>
-      allModules.filter((module) => {
-        if (!newTaskAreaId || !module.portalNome) return true
-        return module.portalNome === areas.find((area) => area.id === newTaskAreaId)?.nome
-      }),
-    [allModules, areas, newTaskAreaId],
-  )
+  useEffect(() => {
+    if (!detailQuery.data?.tarefas?.length) {
+      setExpandedTaskIds([])
+      return
+    }
 
-  if (detailQuery.isLoading || projectsQuery.isLoading || areasQuery.isLoading || modulesQuery.isLoading) return <LoadingState />
-  if (!detailQuery.data) {
+    setExpandedTaskIds((current) => {
+      const validIds = current.filter((id) => detailQuery.data?.tarefas.some((task) => task.id === id))
+      return validIds.length > 0 ? validIds : detailQuery.data!.tarefas.map((task) => task.id)
+    })
+  }, [detailQuery.data])
+
+  const projects = projectsQuery.data ?? []
+  const portals = portalsQuery.data ?? []
+  const modules = modulesQuery.data ?? []
+  const detail = detailQuery.data
+
+  const modulesByPortal = useMemo(() => {
+    return modules.reduce<Record<string, typeof modules>>((accumulator, module) => {
+      const key = module.portalId || '__no_portal__'
+      accumulator[key] = accumulator[key] ? [...accumulator[key], module] : [module]
+      return accumulator
+    }, {})
+  }, [modules])
+
+  if (detailQuery.isLoading || projectsQuery.isLoading || portalsQuery.isLoading) {
+    return <LoadingState />
+  }
+
+  if (!detail) {
     return (
       <Card className="space-y-3">
         <p className="font-semibold text-foreground">Demanda nao encontrada</p>
-        <p className="text-sm text-muted">Essa demanda pode ter sido removida ou voce nao tem acesso a ela.</p>
+        <p className="text-sm text-muted">A demanda pode ter sido removida ou nao estar acessivel no escopo atual.</p>
       </Card>
     )
   }
 
-  const detail = detailQuery.data
-  const refreshDetail = async () => {
+  async function refreshDetail() {
     await queryClient.invalidateQueries({ queryKey: ['demanda', demandaId] })
     await queryClient.invalidateQueries({ queryKey: ['demandas'] })
   }
 
+  function toggleTask(taskId: string) {
+    setExpandedTaskIds((current) =>
+      current.includes(taskId) ? current.filter((id) => id !== taskId) : [...current, taskId],
+    )
+  }
+
   async function handleSaveDemanda() {
-    setIsSaving(true)
+    setIsSavingDemand(true)
     try {
-      await updateDemanda(demandaId, { titulo, descricao, projectId, status, prioridade, responsavelId })
-      setMessage('Dados basicos da demanda atualizados com sucesso.')
+      await updateDemanda(demandaId, {
+        titulo,
+        descricao,
+        projectId,
+        status,
+        prioridade,
+        responsavelId,
+      })
+      setMessage('Dados da demanda atualizados com sucesso.')
       await refreshDetail()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Nao foi possivel atualizar a demanda.')
     } finally {
-      setIsSaving(false)
+      setIsSavingDemand(false)
     }
   }
 
-  async function handleAddTask() {
-    setIsAddingTask(true)
+  async function handleCreateTask() {
+    setIsCreatingTask(true)
     try {
-      await createDemandaTarefa(demandaId, {
+      const created = await createDemandaTarefa(demandaId, {
         titulo: newTaskTitle,
         descricao: newTaskDescription,
-        areaId: newTaskAreaId,
-        moduleId: newTaskModuleId,
+        portalId: newTaskPortalId || undefined,
+        moduleId: newTaskModuleId || undefined,
         status: newTaskStatus,
+        ordem: Number(newTaskOrder || 1),
       })
       setNewTaskTitle('')
       setNewTaskDescription('')
-      setNewTaskAreaId('')
+      setNewTaskPortalId('')
       setNewTaskModuleId('')
       setNewTaskStatus('Pendente')
-      setMessage('Tarefa criada com sucesso.')
+      setNewTaskOrder(String((detailQuery.data?.tarefas?.length || 0) + 2))
+      setExpandedTaskIds((current) => [...new Set([...current, created.id])])
+      setMessage('Tarefa adicionada na demanda com sucesso.')
       await refreshDetail()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Nao foi possivel criar a tarefa.')
     } finally {
-      setIsAddingTask(false)
+      setIsCreatingTask(false)
     }
   }
 
-  async function handleUpdateTask(tarefaId: string, payload: TaskPayload) {
-    setEditingTaskId(tarefaId)
+  async function handleSaveTask(taskId: string, payload: Parameters<typeof updateDemandaTarefa>[2]) {
+    setBusyTaskId(taskId)
     try {
-      await updateDemandaTarefa(demandaId, tarefaId, payload)
+      await updateDemandaTarefa(demandaId, taskId, payload)
       setMessage('Tarefa atualizada com sucesso.')
       await refreshDetail()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Nao foi possivel atualizar a tarefa.')
     } finally {
-      setEditingTaskId('')
+      setBusyTaskId('')
     }
   }
 
-  async function handleDeleteTask(tarefaId: string) {
-    if (!window.confirm('Deseja remover esta tarefa da demanda?')) return
-    setEditingTaskId(tarefaId)
+  async function handleDeleteTask(taskId: string) {
+    if (!window.confirm('Deseja excluir esta tarefa e tudo que estiver abaixo dela na arvore?')) return
+    setBusyTaskId(taskId)
     try {
-      await deleteDemandaTarefa(demandaId, tarefaId)
-      setMessage('Tarefa removida com sucesso.')
+      await deleteDemandaTarefa(demandaId, taskId)
+      setExpandedTaskIds((current) => current.filter((id) => id !== taskId))
+      setMessage('Tarefa excluida com sucesso.')
       await refreshDetail()
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Nao foi possivel remover a tarefa.')
+      setMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir a tarefa.')
     } finally {
-      setEditingTaskId('')
+      setBusyTaskId('')
     }
   }
 
-  async function handleCreateScenario(tarefaId: string, payload: ScenarioPayload) {
-    setBusyScenarioKey(`create:${tarefaId}`)
+  async function handleCreateScenario(
+    tarefaId: string,
+    payload: {
+      titulo: string
+      descricao: string
+      tipo: DemandaCenarioTipo
+      status: DemandaCenarioStatus
+      observacoes: string
+    },
+  ) {
+    const busyKey = `${tarefaId}:create`
+    setBusyScenarioKey(busyKey)
     try {
       await createDemandaCenario(demandaId, tarefaId, payload)
       setMessage('Cenario criado com sucesso.')
@@ -176,8 +276,19 @@ export function DemandaDetailPage() {
     }
   }
 
-  async function handleUpdateScenario(tarefaId: string, cenarioId: string, payload: ScenarioPayload) {
-    setBusyScenarioKey(`update:${cenarioId}`)
+  async function handleSaveScenario(
+    tarefaId: string,
+    cenarioId: string,
+    payload: {
+      titulo: string
+      descricao: string
+      tipo: DemandaCenarioTipo
+      status: DemandaCenarioStatus
+      observacoes: string
+    },
+  ) {
+    const busyKey = `${tarefaId}:${cenarioId}`
+    setBusyScenarioKey(busyKey)
     try {
       await updateDemandaCenario(demandaId, tarefaId, cenarioId, payload)
       setMessage('Cenario atualizado com sucesso.')
@@ -190,31 +301,36 @@ export function DemandaDetailPage() {
   }
 
   async function handleDeleteScenario(tarefaId: string, cenarioId: string) {
-    if (!window.confirm('Deseja remover este cenario da tarefa?')) return
-    setBusyScenarioKey(`delete:${cenarioId}`)
+    if (!window.confirm('Deseja excluir este cenario e suas evidencias?')) return
+    const busyKey = `${tarefaId}:${cenarioId}`
+    setBusyScenarioKey(busyKey)
     try {
       await deleteDemandaCenario(demandaId, tarefaId, cenarioId)
-      setMessage('Cenario removido com sucesso.')
+      setMessage('Cenario excluido com sucesso.')
       await refreshDetail()
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Nao foi possivel remover o cenario.')
+      setMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir o cenario.')
     } finally {
       setBusyScenarioKey('')
     }
   }
 
-  async function handleCreateScenarioEvidence(
+  async function handleCreateEvidence(
     tarefaId: string,
     cenarioId: string,
-    payload: { file: File; legenda: string },
+    file: File,
+    legenda: string,
+    ordem: number,
   ) {
-    setBusyScenarioKey(`evidence-create:${cenarioId}`)
+    const busyKey = `${tarefaId}:${cenarioId}:upload`
+    setBusyScenarioKey(busyKey)
     try {
-      const arquivoDataUrl = await fileToDataUrl(payload.file)
+      const arquivoDataUrl = await fileToDataUrl(file)
       await createDemandaCenarioEvidencia(demandaId, tarefaId, cenarioId, {
-        nomeArquivo: payload.file.name,
+        nomeArquivo: file.name,
         arquivoDataUrl,
-        legenda: payload.legenda,
+        legenda,
+        ordem,
       })
       setMessage('Evidencia anexada com sucesso.')
       await refreshDetail()
@@ -225,9 +341,10 @@ export function DemandaDetailPage() {
     }
   }
 
-  async function handleDeleteScenarioEvidence(tarefaId: string, cenarioId: string, evidenciaId: string) {
+  async function handleDeleteEvidence(tarefaId: string, cenarioId: string, evidenciaId: string) {
     if (!window.confirm('Deseja remover esta evidencia do cenario?')) return
-    setBusyScenarioKey(`evidence-delete:${evidenciaId}`)
+    const busyKey = `${tarefaId}:${cenarioId}:${evidenciaId}`
+    setBusyScenarioKey(busyKey)
     try {
       await deleteDemandaCenarioEvidencia(demandaId, tarefaId, cenarioId, evidenciaId)
       setMessage('Evidencia removida com sucesso.')
@@ -239,360 +356,690 @@ export function DemandaDetailPage() {
     }
   }
 
+  async function handleDeleteDemanda() {
+    if (!window.confirm('Deseja excluir esta demanda inteira? Todas as tarefas, cenarios e evidencias vinculadas serao removidas.')) return
+    setIsDeletingDemand(true)
+    try {
+      await deleteDemanda(demandaId)
+      await queryClient.invalidateQueries({ queryKey: ['demandas'] })
+      navigate('/demandas')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir a demanda.')
+      setIsDeletingDemand(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SectionHeader
         eyebrow="Demandas"
         title={detail.titulo}
-        description="Mantenha a demanda principal separada dos chamados e use as tarefas para decompor frentes de validacao ou escopo."
+        description="A demanda agora fica distribuida em uma leitura mais operacional: cabecalho no topo, criacao de tarefa logo abaixo e arvore completa preenchendo a tela com tarefas expansivas."
+        action={<Button variant="secondary" onClick={() => navigate('/demandas')}>Voltar para lista</Button>}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
-        <Card className="space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm text-muted">Cabecalho da demanda</p>
-              <h2 className="font-display text-xl font-bold text-foreground">Dados basicos</h2>
-            </div>
-            <div className="flex gap-2">
+      <Card className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm text-muted">Cabecalho da demanda</p>
+            <h2 className="font-display text-2xl font-bold text-foreground">Dados basicos</h2>
+            <p className="mt-2 text-sm text-muted">{message}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge value={detail.status} />
+            <StatusBadge value={detail.prioridade} />
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Field label="Titulo">
+            <Input value={titulo} onChange={(event) => setTitulo(event.target.value)} />
+          </Field>
+
+          <Field label="Projeto">
+            <select value={projectId} onChange={(event) => setProjectId(event.target.value)} className={selectClass}>
+              <option value="">Selecione</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.nome}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Descricao" helper="Resumo funcional e recorte da demanda.">
+            <textarea
+              value={descricao}
+              onChange={(event) => setDescricao(event.target.value)}
+              className={textareaClass}
+              placeholder="Descreva o objetivo da demanda, contexto funcional e impactos previstos."
+            />
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Status">
+              <select value={status} onChange={(event) => setStatus(event.target.value)} className={selectClass}>
+                <option value="Rascunho">Rascunho</option>
+                <option value="Em andamento">Em andamento</option>
+                <option value="Concluida">Concluida</option>
+              </select>
+            </Field>
+
+            <Field label="Prioridade">
+              <select value={prioridade} onChange={(event) => setPrioridade(event.target.value)} className={selectClass}>
+                <option value="Baixa">Baixa</option>
+                <option value="Media">Media</option>
+                <option value="Alta">Alta</option>
+              </select>
+            </Field>
+
+            <Field label="Responsavel ID" helper="Opcional nesta etapa.">
+              <Input value={responsavelId} onChange={(event) => setResponsavelId(event.target.value)} placeholder="user-..." />
+            </Field>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={() => void handleSaveDemanda()} disabled={isSavingDemand}>
+            {isSavingDemand ? 'Salvando...' : 'Salvar demanda'}
+          </Button>
+          <Button variant="secondary" onClick={() => void handleDeleteDemanda()} disabled={isDeletingDemand}>
+            {isDeletingDemand ? 'Excluindo...' : 'Excluir demanda'}
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="space-y-4">
+        <div>
+          <p className="text-sm text-muted">Nova tarefa</p>
+          <h2 className="font-display text-2xl font-bold text-foreground">Adicionar frente de validacao</h2>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[1fr,1fr,220px,220px,180px,140px] xl:items-end">
+          <Field label="Titulo">
+            <Input value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} placeholder="Ex.: Portal Config" />
+          </Field>
+
+          <Field label="Descricao">
+            <Input value={newTaskDescription} onChange={(event) => setNewTaskDescription(event.target.value)} placeholder="Escopo rapido da tarefa" />
+          </Field>
+
+          <Field label="Portal">
+            <select
+              value={newTaskPortalId}
+              onChange={(event) => {
+                setNewTaskPortalId(event.target.value)
+                setNewTaskModuleId('')
+              }}
+              className={selectClass}
+            >
+              <option value="">Nao informado</option>
+              {portals.map((portal) => (
+                <option key={portal.id} value={portal.id}>
+                  {portal.nome}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Modulo">
+            <select value={newTaskModuleId} onChange={(event) => setNewTaskModuleId(event.target.value)} className={selectClass}>
+              <option value="">Nao informado</option>
+              {(newTaskPortalId ? modulesByPortal[newTaskPortalId] || [] : []).map((module) => (
+                <option key={module.id} value={module.id}>
+                  {module.portalNome ? `${module.portalNome} / ${module.nome}` : module.nome}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Status">
+            <select value={newTaskStatus} onChange={(event) => setNewTaskStatus(event.target.value)} className={selectClass}>
+              <option value="Pendente">Pendente</option>
+              <option value="Em validacao">Em validacao</option>
+              <option value="Concluida">Concluida</option>
+            </select>
+          </Field>
+
+          <Field label="Ordem">
+            <Input value={newTaskOrder} onChange={(event) => setNewTaskOrder(event.target.value)} />
+          </Field>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={() => void handleCreateTask()} disabled={isCreatingTask}>
+            {isCreatingTask ? 'Adicionando...' : 'Adicionar tarefa'}
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm text-muted">Arvore da demanda</p>
+            <h2 className="font-display text-2xl font-bold text-foreground">Demanda &gt; Tarefas &gt; Cenarios &gt; Bugs</h2>
+            <p className="mt-2 text-sm text-muted">
+              As tarefas agora ficam uma embaixo da outra, preenchendo a tela e com expansao propria. Dentro de cada ramo, os cenarios e evidencias continuam editaveis.
+            </p>
+          </div>
+          <span className="rounded-full border border-accent/20 bg-accent/8 px-3 py-1 text-xs font-semibold text-foreground">
+            {detail.tarefas.length} tarefa(s)
+          </span>
+        </div>
+
+        <div className="space-y-5">
+          <div className="rounded-3xl border border-accent/20 bg-accent/6 p-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-accent">
+                Demanda
+              </span>
+              <p className="font-display text-2xl font-bold text-foreground">{detail.titulo}</p>
               <StatusBadge value={detail.status} />
               <StatusBadge value={detail.prioridade} />
             </div>
+            {detail.descricao ? <p className="mt-3 text-sm text-muted">{detail.descricao}</p> : null}
           </div>
 
-          <div className="grid gap-4">
-            <Field label="Titulo"><Input value={titulo} onChange={(e) => setTitulo(e.target.value)} /></Field>
-            <Field label="Descricao">
-              <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className={textareaClass('min-h-[160px]')} />
-            </Field>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Field label="Projeto">
-                <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={selectClass}>
-                  <option value="">Selecione</option>
-                  {projects.map((project) => <option key={project.id} value={project.id}>{project.nome}</option>)}
-                </select>
-              </Field>
-              <Field label="Responsavel ID">
-                <Input value={responsavelId} onChange={(e) => setResponsavelId(e.target.value)} placeholder="Opcional" />
-              </Field>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Field label="Status">
-                <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClass}>
-                  <option value="Rascunho">Rascunho</option>
-                  <option value="Em andamento">Em andamento</option>
-                  <option value="Concluida">Concluida</option>
-                </select>
-              </Field>
-              <Field label="Prioridade">
-                <select value={prioridade} onChange={(e) => setPrioridade(e.target.value)} className={selectClass}>
-                  <option value="Baixa">Baixa</option><option value="Media">Media</option><option value="Alta">Alta</option>
-                </select>
-              </Field>
-            </div>
-            <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">{message}</div>
-            <div className="flex flex-wrap gap-3">
-              <Button onClick={() => void handleSaveDemanda()} disabled={isSaving}>{isSaving ? 'Salvando...' : 'Salvar dados basicos'}</Button>
-              <Button variant="secondary" onClick={() => navigate('/demandas')}>Voltar para lista</Button>
-            </div>
-          </div>
-        </Card>
-
-        <div className="space-y-6">
-          <Card className="space-y-4">
-            <div><p className="text-sm text-muted">Tarefas internas</p><h2 className="font-display text-xl font-bold text-foreground">Adicionar tarefa</h2></div>
-            <div className="grid gap-4">
-              <Field label="Titulo"><Input value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="Ex.: Portal do Professor" /></Field>
-              <Field label="Descricao"><textarea value={newTaskDescription} onChange={(e) => setNewTaskDescription(e.target.value)} className={textareaClass('min-h-[120px]')} /></Field>
-              <div className="grid gap-4 lg:grid-cols-3">
-                <Field label="Area / Portal">
-                  <select value={newTaskAreaId} onChange={(e) => { setNewTaskAreaId(e.target.value); setNewTaskModuleId('') }} className={selectClass}>
-                    <option value="">Nao informada</option>
-                    {areas.map((area) => <option key={area.id} value={area.id}>{area.nome}</option>)}
-                  </select>
-                </Field>
-                <Field label="Modulo">
-                  <select value={newTaskModuleId} onChange={(e) => setNewTaskModuleId(e.target.value)} className={selectClass}>
-                    <option value="">Nao informado</option>
-                    {newTaskModules.map((module) => <option key={module.id} value={module.id}>{module.portalNome ? `${module.portalNome} / ${module.nome}` : module.nome}</option>)}
-                  </select>
-                </Field>
-                <Field label="Status">
-                  <select value={newTaskStatus} onChange={(e) => setNewTaskStatus(e.target.value)} className={selectClass}>
-                    <option value="Pendente">Pendente</option><option value="Em validacao">Em validacao</option><option value="Concluida">Concluida</option>
-                  </select>
-                </Field>
-              </div>
-              <Button onClick={() => void handleAddTask()} disabled={isAddingTask}>{isAddingTask ? 'Criando tarefa...' : 'Adicionar tarefa'}</Button>
-            </div>
-          </Card>
-
-          <Card className="space-y-4">
-            <div><p className="text-sm text-muted">Tarefas cadastradas</p><h2 className="font-display text-xl font-bold text-foreground">{detail.tarefas.length} tarefa(s)</h2></div>
-            {detail.tarefas.length > 0 ? (
-              <div className="space-y-4">
-                {detail.tarefas.map((tarefa) => (
-                  <TaskCard
-                    key={tarefa.id}
-                    tarefa={tarefa}
-                    areas={areas}
-                    modules={allModules}
-                    busy={editingTaskId === tarefa.id}
-                    busyScenarioKey={busyScenarioKey}
-                    onSave={(payload) => void handleUpdateTask(tarefa.id, payload)}
-                    onDelete={() => void handleDeleteTask(tarefa.id)}
-                  onCreateScenario={(payload) => void handleCreateScenario(tarefa.id, payload)}
-                  onUpdateScenario={(cenarioId, payload) => void handleUpdateScenario(tarefa.id, cenarioId, payload)}
-                  onDeleteScenario={(cenarioId) => void handleDeleteScenario(tarefa.id, cenarioId)}
-                  onCreateEvidence={(cenarioId, payload) => void handleCreateScenarioEvidence(tarefa.id, cenarioId, payload)}
-                  onDeleteEvidence={(cenarioId, evidenciaId) => void handleDeleteScenarioEvidence(tarefa.id, cenarioId, evidenciaId)}
+          {detail.tarefas.length > 0 ? (
+            detail.tarefas
+              .slice()
+              .sort((left, right) => left.ordem - right.ordem)
+              .map((task) => (
+                <TaskTreeCard
+                  key={task.id}
+                  task={task}
+                  modules={modules}
+                  portals={portals}
+                  busy={busyTaskId === task.id}
+                  busyScenarioKey={busyScenarioKey}
+                  expanded={expandedTaskIds.includes(task.id)}
+                  onToggle={() => toggleTask(task.id)}
+                  onSaveTask={(payload) => void handleSaveTask(task.id, payload)}
+                  onDeleteTask={() => void handleDeleteTask(task.id)}
+                  onCreateScenario={(payload) => void handleCreateScenario(task.id, payload)}
+                  onSaveScenario={(cenarioId, payload) => void handleSaveScenario(task.id, cenarioId, payload)}
+                  onDeleteScenario={(cenarioId) => void handleDeleteScenario(task.id, cenarioId)}
+                  onCreateEvidence={(cenarioId, file, legenda, ordem) => void handleCreateEvidence(task.id, cenarioId, file, legenda, ordem)}
+                  onDeleteEvidence={(cenarioId, evidenciaId) => void handleDeleteEvidence(task.id, cenarioId, evidenciaId)}
                 />
-              ))}
-              </div>
-            ) : <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">Nenhuma tarefa cadastrada ainda.</div>}
-          </Card>
+              ))
+          ) : (
+            <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
+              Nenhuma tarefa cadastrada ainda. Crie a primeira frente acima para montar a arvore da demanda.
+            </div>
+          )}
         </div>
-      </div>
+      </Card>
     </div>
   )
 }
 
-function TaskCard({
-  tarefa, areas, modules, busy, busyScenarioKey, onSave, onDelete, onCreateScenario, onUpdateScenario, onDeleteScenario, onCreateEvidence, onDeleteEvidence,
+function TaskTreeCard({
+  task,
+  modules,
+  portals,
+  busy,
+  busyScenarioKey,
+  expanded,
+  onToggle,
+  onSaveTask,
+  onDeleteTask,
+  onCreateScenario,
+  onSaveScenario,
+  onDeleteScenario,
+  onCreateEvidence,
+  onDeleteEvidence,
 }: {
-  tarefa: { id: string; titulo: string; descricao: string; areaId?: string; moduleId?: string; status: string; ordem: number; cenarios?: DemandaCenarioRecord[] }
-  areas: Array<{ id: string; nome: string }>
-  modules: Array<{ id: string; nome: string; portalNome?: string }>
+  task: DemandaTarefaRecord
+  modules: Array<{ id: string; nome: string; portalId?: string; portalNome?: string }>
+  portals: Array<{ id: string; nome: string }>
   busy: boolean
   busyScenarioKey: string
-  onSave: (payload: TaskPayload) => void
-  onDelete: () => void
-  onCreateScenario: (payload: ScenarioPayload) => void
-  onUpdateScenario: (cenarioId: string, payload: ScenarioPayload) => void
+  expanded: boolean
+  onToggle: () => void
+  onSaveTask: (payload: {
+    titulo: string
+    descricao: string
+    portalId?: string
+    areaId?: string
+    moduleId?: string
+    status: string
+    ordem: number
+  }) => void
+  onDeleteTask: () => void
+  onCreateScenario: (payload: {
+    titulo: string
+    descricao: string
+    tipo: DemandaCenarioTipo
+    status: DemandaCenarioStatus
+    observacoes: string
+  }) => void
+  onSaveScenario: (
+    cenarioId: string,
+    payload: {
+      titulo: string
+      descricao: string
+      tipo: DemandaCenarioTipo
+      status: DemandaCenarioStatus
+      observacoes: string
+    },
+  ) => void
   onDeleteScenario: (cenarioId: string) => void
-  onCreateEvidence: (cenarioId: string, payload: { file: File; legenda: string }) => void
+  onCreateEvidence: (cenarioId: string, file: File, legenda: string, ordem: number) => void
   onDeleteEvidence: (cenarioId: string, evidenciaId: string) => void
 }) {
-  const [titulo, setTitulo] = useState(tarefa.titulo)
-  const [descricao, setDescricao] = useState(tarefa.descricao)
-  const [areaId, setAreaId] = useState(tarefa.areaId || '')
-  const [moduleId, setModuleId] = useState(tarefa.moduleId || '')
-  const [status, setStatus] = useState(tarefa.status)
-  const [ordem, setOrdem] = useState(tarefa.ordem)
+  const [titulo, setTitulo] = useState(task.titulo)
+  const [descricao, setDescricao] = useState(task.descricao || '')
+  const [portalId, setPortalId] = useState(task.portalId || '')
+  const [moduleId, setModuleId] = useState(task.moduleId || '')
+  const [status, setStatus] = useState(task.status)
+  const [ordem, setOrdem] = useState(String(task.ordem))
+
   const [newScenarioTitle, setNewScenarioTitle] = useState('')
   const [newScenarioDescription, setNewScenarioDescription] = useState('')
   const [newScenarioType, setNewScenarioType] = useState<DemandaCenarioTipo>('auxiliar')
   const [newScenarioStatus, setNewScenarioStatus] = useState<DemandaCenarioStatus>('parcial')
-  const [newScenarioObservations, setNewScenarioObservations] = useState('')
+  const [newScenarioNotes, setNewScenarioNotes] = useState('')
 
   useEffect(() => {
-    setTitulo(tarefa.titulo); setDescricao(tarefa.descricao); setAreaId(tarefa.areaId || ''); setModuleId(tarefa.moduleId || ''); setStatus(tarefa.status); setOrdem(tarefa.ordem)
-  }, [tarefa.id, tarefa.titulo, tarefa.descricao, tarefa.areaId, tarefa.moduleId, tarefa.status, tarefa.ordem])
+    setTitulo(task.titulo)
+    setDescricao(task.descricao || '')
+    setPortalId(task.portalId || '')
+    setModuleId(task.moduleId || '')
+    setStatus(task.status)
+    setOrdem(String(task.ordem))
+  }, [task.id, task.titulo, task.descricao, task.portalId, task.moduleId, task.status, task.ordem])
 
-  const filteredModules = useMemo(
-    () => modules.filter((module) => !areaId || !module.portalNome || module.portalNome === areas.find((area) => area.id === areaId)?.nome),
-    [modules, areaId, areas],
-  )
-
-  async function handleCreateScenario() {
-    await onCreateScenario({
-      titulo: newScenarioTitle,
-      descricao: newScenarioDescription,
-      tipo: newScenarioType,
-      status: newScenarioStatus,
-      observacoes: newScenarioObservations,
-    })
-    setNewScenarioTitle(''); setNewScenarioDescription(''); setNewScenarioType('auxiliar'); setNewScenarioStatus('parcial'); setNewScenarioObservations('')
-  }
+  const scenarioCount = task.cenarios?.length || 0
+  const principalCount = task.cenarios?.filter((scenario) => scenario.tipo === 'principal').length || 0
 
   return (
-    <div className="rounded-2xl border border-border bg-white/[0.02] p-4">
-      <div className="grid gap-4">
-        <div className="grid gap-4 lg:grid-cols-[90px,1fr]">
-          <Field label="Ordem"><Input value={String(ordem)} onChange={(e) => setOrdem(Number(e.target.value || 0))} /></Field>
-          <Field label="Titulo"><Input value={titulo} onChange={(e) => setTitulo(e.target.value)} /></Field>
-        </div>
-        <Field label="Descricao"><textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className={textareaClass('min-h-[100px]')} /></Field>
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Field label="Area">
-            <select value={areaId} onChange={(e) => { setAreaId(e.target.value); setModuleId('') }} className={selectClass}>
-              <option value="">Nao informada</option>{areas.map((area) => <option key={area.id} value={area.id}>{area.nome}</option>)}
-            </select>
-          </Field>
-          <Field label="Modulo">
-            <select value={moduleId} onChange={(e) => setModuleId(e.target.value)} className={selectClass}>
-              <option value="">Nao informado</option>{filteredModules.map((module) => <option key={module.id} value={module.id}>{module.portalNome ? `${module.portalNome} / ${module.nome}` : module.nome}</option>)}
-            </select>
-          </Field>
-          <Field label="Status">
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClass}>
-              <option value="Pendente">Pendente</option><option value="Em validacao">Em validacao</option><option value="Concluida">Concluida</option>
-            </select>
-          </Field>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Button onClick={() => onSave({ titulo, descricao, areaId, moduleId, status, ordem })} disabled={busy}>{busy ? 'Salvando...' : 'Salvar tarefa'}</Button>
-          <Button variant="secondary" onClick={onDelete} disabled={busy}>Excluir</Button>
-        </div>
+    <TreeNode
+      label={expanded ? 'Tarefa aberta' : 'Tarefa'}
+      meta={
+        <>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="rounded-full border border-border bg-black/20 px-3 py-1 text-xs font-semibold text-foreground transition hover:border-accent/35"
+          >
+            {expanded ? 'Recolher' : 'Expandir'}
+          </button>
+          <span className="text-sm font-semibold text-foreground">{task.ordem}. {task.titulo}</span>
+          <StatusBadge value={task.status} />
+          <span className="text-xs uppercase tracking-[0.14em] text-muted">{scenarioCount} cenario(s)</span>
+        </>
+      }
+    >
+      {expanded ? (
+        <Card className="space-y-5 border-border/80 bg-black/10">
+          <div className="grid gap-4 xl:grid-cols-[1.2fr,1.2fr,220px,220px,180px,140px] xl:items-end">
+            <Field label="Titulo">
+              <Input value={titulo} onChange={(event) => setTitulo(event.target.value)} />
+            </Field>
 
-        <div className="space-y-4 rounded-2xl border border-border bg-black/10 p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div><p className="text-sm text-muted">Cenarios</p><h3 className="font-display text-lg font-bold text-foreground">{tarefa.cenarios?.length ?? 0} cenario(s)</h3></div>
-            <p className="text-right text-xs text-muted">Um cenario principal por tarefa.<br />Cenarios auxiliares ilimitados.</p>
-          </div>
+            <Field label="Descricao">
+              <Input value={descricao} onChange={(event) => setDescricao(event.target.value)} placeholder="Escopo rapido" />
+            </Field>
 
-          <div className="grid gap-4 rounded-2xl border border-border bg-white/[0.02] p-4">
-            <div className="grid gap-4 lg:grid-cols-[1.2fr,0.9fr]">
-              <Field label="Titulo do cenario"><Input value={newScenarioTitle} onChange={(e) => setNewScenarioTitle(e.target.value)} placeholder="Ex.: Validar parametro salvo corretamente" /></Field>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Tipo">
-                  <select value={newScenarioType} onChange={(e) => setNewScenarioType(e.target.value as DemandaCenarioTipo)} className={selectClass}>
-                    <option value="principal">Principal</option><option value="auxiliar">Auxiliar</option>
-                  </select>
-                </Field>
-                <Field label="Status">
-                  <select value={newScenarioStatus} onChange={(e) => setNewScenarioStatus(e.target.value as DemandaCenarioStatus)} className={selectClass}>
-                    <option value="passou">Passou</option><option value="falhou">Falhou</option><option value="parcial">Parcial</option>
-                  </select>
-                </Field>
-              </div>
-            </div>
-            <Field label="Descricao"><textarea value={newScenarioDescription} onChange={(e) => setNewScenarioDescription(e.target.value)} className={textareaClass('min-h-[90px]')} placeholder="Descreva rapidamente o fluxo validado neste cenario." /></Field>
-            <Field label="Observacoes"><textarea value={newScenarioObservations} onChange={(e) => setNewScenarioObservations(e.target.value)} className={textareaClass('min-h-[80px]')} placeholder="Opcional" /></Field>
-            <Button onClick={() => void handleCreateScenario()} disabled={busyScenarioKey === `create:${tarefa.id}`}>{busyScenarioKey === `create:${tarefa.id}` ? 'Criando cenario...' : 'Adicionar cenario'}</Button>
-          </div>
-
-          {tarefa.cenarios && tarefa.cenarios.length > 0 ? (
-            <div className="space-y-3">
-              {tarefa.cenarios.map((cenario) => (
-                <ScenarioCard
-                  key={cenario.id}
-                  cenario={cenario}
-                  busy={busyScenarioKey === `update:${cenario.id}` || busyScenarioKey === `delete:${cenario.id}` || busyScenarioKey === `evidence-create:${cenario.id}`}
-                  busyScenarioKey={busyScenarioKey}
-                  onSave={(payload) => onUpdateScenario(cenario.id, payload)}
-                  onDelete={() => onDeleteScenario(cenario.id)}
-                  onCreateEvidence={(payload) => onCreateEvidence(cenario.id, payload)}
-                  onDeleteEvidence={(evidenciaId) => onDeleteEvidence(cenario.id, evidenciaId)}
-                />
-              ))}
-            </div>
-          ) : <div className="rounded-2xl border border-dashed border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">Nenhum cenario cadastrado nesta tarefa ainda.</div>}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ScenarioCard({
-  cenario, busy, busyScenarioKey, onSave, onDelete, onCreateEvidence, onDeleteEvidence,
-}: {
-  cenario: DemandaCenarioRecord
-  busy: boolean
-  busyScenarioKey: string
-  onSave: (payload: ScenarioPayload) => void
-  onDelete: () => void
-  onCreateEvidence: (payload: { file: File; legenda: string }) => void
-  onDeleteEvidence: (evidenciaId: string) => void
-}) {
-  const [titulo, setTitulo] = useState(cenario.titulo)
-  const [descricao, setDescricao] = useState(cenario.descricao)
-  const [tipo, setTipo] = useState<DemandaCenarioTipo>(cenario.tipo)
-  const [status, setStatus] = useState<DemandaCenarioStatus>(cenario.status)
-  const [observacoes, setObservacoes] = useState(cenario.observacoes)
-  const [selectedEvidenceFile, setSelectedEvidenceFile] = useState<File | null>(null)
-  const [evidenceCaption, setEvidenceCaption] = useState('')
-
-  useEffect(() => {
-    setTitulo(cenario.titulo); setDescricao(cenario.descricao); setTipo(cenario.tipo); setStatus(cenario.status); setObservacoes(cenario.observacoes)
-  }, [cenario.id, cenario.titulo, cenario.descricao, cenario.tipo, cenario.status, cenario.observacoes])
-
-  async function handleCreateEvidence() {
-    if (!selectedEvidenceFile) return
-    await onCreateEvidence({ file: selectedEvidenceFile, legenda: evidenceCaption })
-    setSelectedEvidenceFile(null)
-    setEvidenceCaption('')
-  }
-
-  return (
-    <div className="rounded-2xl border border-border bg-white/[0.02] p-4">
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><p className="text-sm text-muted">Cenario</p><h4 className="font-display text-lg font-bold text-foreground">{cenario.titulo || 'Sem titulo'}</h4></div>
-          <div className="flex gap-2"><StatusBadge value={tipo} /><StatusBadge value={status} /></div>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-[1.2fr,0.9fr]">
-          <Field label="Titulo"><Input value={titulo} onChange={(e) => setTitulo(e.target.value)} /></Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Tipo">
-              <select value={tipo} onChange={(e) => setTipo(e.target.value as DemandaCenarioTipo)} className={selectClass}>
-                <option value="principal">Principal</option><option value="auxiliar">Auxiliar</option>
+            <Field label="Portal">
+              <select
+                value={portalId}
+                onChange={(event) => {
+                  setPortalId(event.target.value)
+                  setModuleId('')
+                }}
+                className={selectClass}
+              >
+                <option value="">Nao informado</option>
+                {portals.map((portal) => (
+                  <option key={portal.id} value={portal.id}>
+                    {portal.nome}
+                  </option>
+                ))}
               </select>
             </Field>
+
+            <Field label="Modulo">
+              <select value={moduleId} onChange={(event) => setModuleId(event.target.value)} className={selectClass}>
+                <option value="">Nao informado</option>
+                {(portalId ? modules.filter((module) => module.portalId === portalId) : []).map((module) => (
+                  <option key={module.id} value={module.id}>
+                    {module.portalNome ? `${module.portalNome} / ${module.nome}` : module.nome}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
             <Field label="Status">
-              <select value={status} onChange={(e) => setStatus(e.target.value as DemandaCenarioStatus)} className={selectClass}>
-                <option value="passou">Passou</option><option value="falhou">Falhou</option><option value="parcial">Parcial</option>
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value as DemandaTarefaRecord['status'])}
+                className={selectClass}
+              >
+                <option value="Pendente">Pendente</option>
+                <option value="Em validacao">Em validacao</option>
+                <option value="Concluida">Concluida</option>
               </select>
             </Field>
-          </div>
-        </div>
-        <Field label="Descricao"><textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className={textareaClass('min-h-[90px]')} /></Field>
-        <Field label="Observacoes"><textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} className={textareaClass('min-h-[80px]')} /></Field>
-        <div className="flex flex-wrap gap-3">
-          <Button onClick={() => onSave({ titulo, descricao, tipo, status, observacoes })} disabled={busy}>{busy ? 'Salvando...' : 'Salvar cenario'}</Button>
-          <Button variant="secondary" onClick={onDelete} disabled={busy}>Excluir cenario</Button>
-        </div>
 
-        <div className="space-y-4 rounded-2xl border border-border bg-black/10 p-4">
-          <div>
-            <p className="text-sm text-muted">Evidencias</p>
-            <h5 className="font-display text-base font-bold text-foreground">{cenario.evidencias?.length ?? 0} evidencia(s)</h5>
+            <Field label="Ordem">
+              <Input value={ordem} onChange={(event) => setOrdem(event.target.value)} />
+            </Field>
           </div>
 
-          <div className="grid gap-4 rounded-2xl border border-border bg-white/[0.02] p-4">
-            <Field label="Arquivo">
-              <Input
-                type="file"
-                onChange={(event) => setSelectedEvidenceFile(event.target.files?.[0] ?? null)}
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-              />
-            </Field>
-            <Field label="Legenda opcional">
-              <Input value={evidenceCaption} onChange={(event) => setEvidenceCaption(event.target.value)} placeholder="Ex.: Tela apos salvar com sucesso" />
-            </Field>
-            <Button onClick={() => void handleCreateEvidence()} disabled={!selectedEvidenceFile || busyScenarioKey === `evidence-create:${cenario.id}`}>
-              {busyScenarioKey === `evidence-create:${cenario.id}` ? 'Anexando evidencia...' : 'Adicionar evidencia'}
+          <div className="flex flex-wrap gap-3">
+            <Button
+              onClick={() =>
+                onSaveTask({
+                  titulo,
+                  descricao,
+                  portalId: portalId || undefined,
+                  moduleId: moduleId || undefined,
+                  status,
+                  ordem: Number(ordem || 1),
+                })
+              }
+              disabled={busy}
+            >
+              {busy ? 'Salvando...' : 'Salvar tarefa'}
+            </Button>
+            <Button variant="secondary" onClick={onDeleteTask} disabled={busy}>
+              Excluir tarefa
             </Button>
           </div>
 
-          {cenario.evidencias && cenario.evidencias.length > 0 ? (
+          <TreeNode
+            label="Cenarios"
+            meta={
+              <>
+                <span className="text-sm text-foreground">{scenarioCount} total</span>
+                <span className="text-xs uppercase tracking-[0.14em] text-muted">
+                  {principalCount} principal / {Math.max(0, scenarioCount - principalCount)} auxiliares
+                </span>
+              </>
+            }
+          >
+            <Card className="space-y-4 border-border/70 bg-black/10">
+              <div className="grid gap-4 xl:grid-cols-[1.2fr,220px,180px] xl:items-end">
+                <Field label="Titulo do cenario">
+                  <Input
+                    value={newScenarioTitle}
+                    onChange={(event) => setNewScenarioTitle(event.target.value)}
+                    placeholder="Ex.: Parametro marcado"
+                  />
+                </Field>
+
+                <Field label="Tipo">
+                  <select
+                    value={newScenarioType}
+                    onChange={(event) => setNewScenarioType(event.target.value as DemandaCenarioTipo)}
+                    className={selectClass}
+                  >
+                    <option value="auxiliar">Auxiliar</option>
+                    <option value="principal">Principal</option>
+                  </select>
+                </Field>
+
+                <Field label="Status">
+                  <select
+                    value={newScenarioStatus}
+                    onChange={(event) => setNewScenarioStatus(event.target.value as DemandaCenarioStatus)}
+                    className={selectClass}
+                  >
+                    <option value="parcial">Parcial</option>
+                    <option value="passou">Passou</option>
+                    <option value="falhou">Falhou</option>
+                  </select>
+                </Field>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <Field label="Descricao">
+                  <textarea
+                    value={newScenarioDescription}
+                    onChange={(event) => setNewScenarioDescription(event.target.value)}
+                    className={textareaClass}
+                    placeholder="Descreva rapidamente o fluxo validado neste cenario."
+                  />
+                </Field>
+
+                <Field label="Observacoes">
+                  <textarea
+                    value={newScenarioNotes}
+                    onChange={(event) => setNewScenarioNotes(event.target.value)}
+                    className={textareaClass}
+                    placeholder="Opcional"
+                  />
+                </Field>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={() =>
+                    onCreateScenario({
+                      titulo: newScenarioTitle,
+                      descricao: newScenarioDescription,
+                      tipo: newScenarioType,
+                      status: newScenarioStatus,
+                      observacoes: newScenarioNotes,
+                    })
+                  }
+                  disabled={busyScenarioKey === `${task.id}:create`}
+                >
+                  {busyScenarioKey === `${task.id}:create` ? 'Adicionando...' : 'Adicionar cenario'}
+                </Button>
+              </div>
+            </Card>
+
+            {task.cenarios && task.cenarios.length > 0 ? (
+              <div className="space-y-4">
+                {task.cenarios.map((scenario) => (
+                  <ScenarioTreeCard
+                    key={scenario.id}
+                    scenario={scenario}
+                    busy={busyScenarioKey.startsWith(`${task.id}:${scenario.id}`)}
+                    onSave={(payload) => onSaveScenario(scenario.id, payload)}
+                    onDelete={() => onDeleteScenario(scenario.id)}
+                    onCreateEvidence={(file, legenda, evidenceOrder) => onCreateEvidence(scenario.id, file, legenda, evidenceOrder)}
+                    onDeleteEvidence={(evidenciaId) => onDeleteEvidence(scenario.id, evidenciaId)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
+                Nenhum cenario cadastrado ainda nesta tarefa.
+              </div>
+            )}
+          </TreeNode>
+
+          <TreeNode
+            label="Bugs"
+            meta={<span className="text-xs uppercase tracking-[0.14em] text-muted">Em breve</span>}
+          >
+            <div className="rounded-2xl border border-dashed border-border bg-white/[0.02] px-4 py-4 text-sm text-muted">
+              Esta coluna da arvore ja foi reservada para bugs vinculados por tarefa/cenario, mas a integracao ainda nao foi ativada nesta etapa.
+            </div>
+          </TreeNode>
+        </Card>
+      ) : null}
+    </TreeNode>
+  )
+}
+
+function ScenarioTreeCard({
+  scenario,
+  busy,
+  onSave,
+  onDelete,
+  onCreateEvidence,
+  onDeleteEvidence,
+}: {
+  scenario: DemandaCenarioRecord
+  busy: boolean
+  onSave: (payload: {
+    titulo: string
+    descricao: string
+    tipo: DemandaCenarioTipo
+    status: DemandaCenarioStatus
+    observacoes: string
+  }) => void
+  onDelete: () => void
+  onCreateEvidence: (file: File, legenda: string, ordem: number) => void
+  onDeleteEvidence: (evidenciaId: string) => void
+}) {
+  const [titulo, setTitulo] = useState(scenario.titulo)
+  const [descricao, setDescricao] = useState(scenario.descricao || '')
+  const [tipo, setTipo] = useState<DemandaCenarioTipo>(scenario.tipo)
+  const [status, setStatus] = useState<DemandaCenarioStatus>(scenario.status)
+  const [observacoes, setObservacoes] = useState(scenario.observacoes || '')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [legenda, setLegenda] = useState('')
+  const [ordem, setOrdem] = useState(String((scenario.evidencias?.length || 0) + 1))
+
+  useEffect(() => {
+    setTitulo(scenario.titulo)
+    setDescricao(scenario.descricao || '')
+    setTipo(scenario.tipo)
+    setStatus(scenario.status)
+    setObservacoes(scenario.observacoes || '')
+  }, [scenario.id, scenario.titulo, scenario.descricao, scenario.tipo, scenario.status, scenario.observacoes])
+
+  const isUploading = busy && selectedFile !== null
+
+  return (
+    <TreeNode
+      label={scenario.tipo === 'principal' ? 'Cenario principal' : 'Cenario auxiliar'}
+      meta={
+        <>
+          <span className="text-sm font-semibold text-foreground">{scenario.titulo}</span>
+          <StatusBadge value={scenario.status} />
+        </>
+      }
+    >
+      <Card className="space-y-4 border-border/70 bg-black/10">
+        <div className="grid gap-4 xl:grid-cols-[1.25fr,220px,180px] xl:items-end">
+          <Field label="Titulo">
+            <Input value={titulo} onChange={(event) => setTitulo(event.target.value)} />
+          </Field>
+
+          <Field label="Tipo">
+            <select value={tipo} onChange={(event) => setTipo(event.target.value as DemandaCenarioTipo)} className={selectClass}>
+              <option value="principal">Principal</option>
+              <option value="auxiliar">Auxiliar</option>
+            </select>
+          </Field>
+
+          <Field label="Status">
+            <select value={status} onChange={(event) => setStatus(event.target.value as DemandaCenarioStatus)} className={selectClass}>
+              <option value="passou">Passou</option>
+              <option value="falhou">Falhou</option>
+              <option value="parcial">Parcial</option>
+            </select>
+          </Field>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Field label="Descricao">
+            <textarea
+              value={descricao}
+              onChange={(event) => setDescricao(event.target.value)}
+              className={textareaClass}
+              placeholder="Descreva o fluxo validado neste cenario."
+            />
+          </Field>
+
+          <Field label="Observacoes">
+            <textarea
+              value={observacoes}
+              onChange={(event) => setObservacoes(event.target.value)}
+              className={textareaClass}
+              placeholder="Observacoes do QA"
+            />
+          </Field>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={() => onSave({ titulo, descricao, tipo, status, observacoes })} disabled={busy}>
+            {busy ? 'Salvando...' : 'Salvar cenario'}
+          </Button>
+          <Button variant="secondary" onClick={onDelete} disabled={busy}>
+            Excluir cenario
+          </Button>
+        </div>
+
+        <TreeNode
+          label="Evidencias"
+          meta={
+            <span className="text-xs uppercase tracking-[0.14em] text-muted">
+              {(scenario.evidencias?.length || 0)} item(ns)
+            </span>
+          }
+        >
+          <Card className="space-y-4 border-border/70 bg-black/10">
+            <div className="grid gap-4 xl:grid-cols-[1fr,1fr,140px,auto] xl:items-end">
+              <Field label="Arquivo">
+                <Input type="file" onChange={(event) => setSelectedFile(event.target.files?.[0] || null)} />
+              </Field>
+
+              <Field label="Legenda">
+                <Input value={legenda} onChange={(event) => setLegenda(event.target.value)} placeholder="Opcional" />
+              </Field>
+
+              <Field label="Ordem">
+                <Input value={ordem} onChange={(event) => setOrdem(event.target.value)} />
+              </Field>
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={() => {
+                    if (!selectedFile) return
+                    onCreateEvidence(selectedFile, legenda, Number(ordem || 1))
+                    setSelectedFile(null)
+                    setLegenda('')
+                    setOrdem(String((scenario.evidencias?.length || 0) + 2))
+                  }}
+                  disabled={!selectedFile || isUploading}
+                >
+                  {isUploading ? 'Enviando...' : 'Adicionar evidencia'}
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          {scenario.evidencias && scenario.evidencias.length > 0 ? (
             <div className="space-y-3">
-              {cenario.evidencias.map((evidencia) => {
-                const isImage = evidencia.tipoArquivo?.startsWith('image/')
+              {scenario.evidencias.map((evidence) => {
+                const isImage = evidence.tipoArquivo?.toLowerCase().startsWith('image/')
                 return (
-                  <div key={evidencia.id} className="rounded-2xl border border-border bg-white/[0.02] p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="font-semibold text-foreground">{evidencia.nomeArquivo}</p>
-                        <p className="text-xs text-muted">{new Date(evidencia.createdAt).toLocaleString('pt-BR')}</p>
-                        {evidencia.legenda ? <p className="text-sm text-muted">{evidencia.legenda}</p> : null}
+                  <div key={evidence.id} className="rounded-2xl border border-border bg-white/[0.02] p-4">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="space-y-2">
+                        <p className="font-semibold text-foreground">{evidence.nomeArquivo}</p>
+                        <p className="text-xs uppercase tracking-[0.14em] text-muted">
+                          Criado em {new Date(evidence.createdAt).toLocaleString('pt-BR')}
+                        </p>
+                        {evidence.legenda ? <p className="text-sm text-muted">{evidence.legenda}</p> : null}
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="secondary" onClick={() => window.open(evidencia.urlArquivo, '_blank', 'noopener,noreferrer')}>
-                          Abrir
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => onDeleteEvidence(evidencia.id)}
-                          disabled={busyScenarioKey === `evidence-delete:${evidencia.id}`}
+
+                      <div className="flex flex-wrap gap-3">
+                        <a
+                          href={evidence.urlArquivo}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex h-10 items-center justify-center rounded-2xl border border-accent/25 bg-accent/8 px-4 text-sm font-semibold text-foreground transition hover:border-accent/45"
                         >
-                          {busyScenarioKey === `evidence-delete:${evidencia.id}` ? 'Removendo...' : 'Excluir evidencia'}
+                          Abrir
+                        </a>
+                        <Button variant="secondary" onClick={() => onDeleteEvidence(evidence.id)} disabled={busy}>
+                          Excluir
                         </Button>
                       </div>
                     </div>
+
                     {isImage ? (
-                      <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-black/20 p-2">
-                        <img src={evidencia.urlArquivo} alt={evidencia.nomeArquivo} className="max-h-48 w-full rounded-xl object-contain" />
+                      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-black/20">
+                        <img src={evidence.urlArquivo} alt={evidence.nomeArquivo} className="max-h-80 w-full object-contain" />
                       </div>
                     ) : null}
                   </div>
@@ -600,23 +1047,12 @@ function ScenarioCard({
               })}
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
-              Nenhuma evidencia cadastrada neste cenario ainda.
+            <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
+              Nenhuma evidencia cadastrada neste cenario.
             </div>
           )}
-        </div>
-      </div>
-    </div>
+        </TreeNode>
+      </Card>
+    </TreeNode>
   )
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="space-y-2"><span className="text-sm font-semibold text-foreground">{label}</span>{children}</label>
-}
-
-const selectClass =
-  'h-12 w-full rounded-2xl border border-border bg-black/20 px-4 text-sm text-foreground outline-none focus:border-accent/40'
-
-function textareaClass(extra: string) {
-  return `${extra} rounded-3xl border border-border bg-black/20 px-4 py-3 text-sm text-foreground outline-none focus:border-accent/35`
 }

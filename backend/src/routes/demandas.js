@@ -127,6 +127,7 @@ async function ensureDemandasSchema() {
             DemandaId NVARCHAR(120) NOT NULL,
             Titulo NVARCHAR(250) NOT NULL,
             Descricao NVARCHAR(MAX) NULL,
+            PortalId INT NULL,
             AreaId INT NULL,
             ModuloId INT NULL,
             Status NVARCHAR(40) NOT NULL CONSTRAINT DF_DemandaTarefas_Status DEFAULT ('Pendente'),
@@ -134,11 +135,33 @@ async function ensureDemandasSchema() {
             CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaTarefas_CriadoEm DEFAULT (SYSDATETIME()),
             AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaTarefas_AtualizadoEm DEFAULT (SYSDATETIME()),
             CONSTRAINT FK_DemandaTarefas_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id) ON DELETE CASCADE,
+            CONSTRAINT FK_DemandaTarefas_ProjetoPortais FOREIGN KEY (PortalId) REFERENCES dbo.ProjetoPortais (Id),
             CONSTRAINT FK_DemandaTarefas_Areas FOREIGN KEY (AreaId) REFERENCES dbo.Areas (Id),
             CONSTRAINT FK_DemandaTarefas_Modulos FOREIGN KEY (ModuloId) REFERENCES dbo.Modulos (Id)
           );
 
           CREATE INDEX IX_DemandaTarefas_DemandaId ON dbo.DemandaTarefas (DemandaId, Ordem);
+        END;
+
+        IF COL_LENGTH('dbo.DemandaTarefas', 'PortalId') IS NULL
+        BEGIN
+          ALTER TABLE dbo.DemandaTarefas ADD PortalId INT NULL;
+        END;
+
+        IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_DemandaTarefas_ProjetoPortais')
+        BEGIN
+          ALTER TABLE dbo.DemandaTarefas
+          ADD CONSTRAINT FK_DemandaTarefas_ProjetoPortais FOREIGN KEY (PortalId) REFERENCES dbo.ProjetoPortais (Id);
+        END;
+
+        IF NOT EXISTS (
+          SELECT 1
+          FROM sys.indexes
+          WHERE name = 'IX_DemandaTarefas_PortalId'
+            AND object_id = OBJECT_ID('dbo.DemandaTarefas')
+        )
+        BEGIN
+          CREATE INDEX IX_DemandaTarefas_PortalId ON dbo.DemandaTarefas (PortalId);
         END;
 
         IF OBJECT_ID('dbo.DemandaCenarios', 'U') IS NULL
@@ -155,7 +178,7 @@ async function ensureDemandasSchema() {
             CriadoPorUsuarioId NVARCHAR(120) NULL,
             CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarios_CriadoEm DEFAULT (SYSDATETIME()),
             AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarios_AtualizadoEm DEFAULT (SYSDATETIME()),
-            CONSTRAINT FK_DemandaCenarios_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id) ON DELETE CASCADE,
+            CONSTRAINT FK_DemandaCenarios_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id),
             CONSTRAINT FK_DemandaCenarios_Tarefas FOREIGN KEY (DemandaTarefaId) REFERENCES dbo.DemandaTarefas (Id) ON DELETE CASCADE
           );
 
@@ -178,8 +201,8 @@ async function ensureDemandasSchema() {
             CriadoPorUsuarioId NVARCHAR(120) NULL,
             CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarioEvidencias_CriadoEm DEFAULT (SYSDATETIME()),
             AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_DemandaCenarioEvidencias_AtualizadoEm DEFAULT (SYSDATETIME()),
-            CONSTRAINT FK_DemandaCenarioEvidencias_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id) ON DELETE CASCADE,
-            CONSTRAINT FK_DemandaCenarioEvidencias_Tarefas FOREIGN KEY (DemandaTarefaId) REFERENCES dbo.DemandaTarefas (Id) ON DELETE CASCADE,
+            CONSTRAINT FK_DemandaCenarioEvidencias_Demandas FOREIGN KEY (DemandaId) REFERENCES dbo.Demandas (Id),
+            CONSTRAINT FK_DemandaCenarioEvidencias_Tarefas FOREIGN KEY (DemandaTarefaId) REFERENCES dbo.DemandaTarefas (Id),
             CONSTRAINT FK_DemandaCenarioEvidencias_Cenarios FOREIGN KEY (DemandaCenarioId) REFERENCES dbo.DemandaCenarios (Id) ON DELETE CASCADE
           );
 
@@ -219,6 +242,8 @@ function mapTarefa(row) {
     demandaId: row.DemandaId,
     titulo: row.Titulo || '',
     descricao: row.Descricao || '',
+    portalId: row.PortalId ? String(row.PortalId) : '',
+    portalName: row.PortalName || row.AreaName || '',
     areaId: row.AreaId ? String(row.AreaId) : '',
     areaName: row.AreaName || '',
     moduleId: row.ModuloId ? String(row.ModuloId) : '',
@@ -299,9 +324,11 @@ async function loadOwnedTarefa(demandaId, tarefaId, auth) {
   const result = await request.query(`
     SELECT TOP 1
       t.*,
+      pp.Nome AS PortalName,
       a.Nome AS AreaName,
       m.Nome AS ModuleName
     FROM dbo.DemandaTarefas t
+    LEFT JOIN dbo.ProjetoPortais pp ON pp.Id = t.PortalId
     LEFT JOIN dbo.Areas a ON a.Id = t.AreaId
     LEFT JOIN dbo.Modulos m ON m.Id = t.ModuloId
     WHERE t.Id = @tarefaId
@@ -398,9 +425,11 @@ router.get('/:id', async (req, res) => {
     const tarefasResult = await tarefasRequest.query(`
       SELECT
         t.*,
+        pp.Nome AS PortalName,
         a.Nome AS AreaName,
         m.Nome AS ModuleName
       FROM dbo.DemandaTarefas t
+      LEFT JOIN dbo.ProjetoPortais pp ON pp.Id = t.PortalId
       LEFT JOIN dbo.Areas a ON a.Id = t.AreaId
       LEFT JOIN dbo.Modulos m ON m.Id = t.ModuloId
       WHERE t.DemandaId = @demandaId
@@ -579,6 +608,31 @@ router.patch('/:id', async (req, res) => {
   }
 })
 
+router.delete('/:id', async (req, res) => {
+  try {
+    await ensureDemandasSchema()
+    await loadOwnedDemanda(req.params.id, req.auth)
+    const pool = await getPool()
+    const request = createRequest(pool)
+    request.input('id', sql.NVarChar(120), req.params.id)
+    await request.query(`
+      DELETE FROM dbo.Demandas
+      WHERE Id = @id
+    `)
+
+    const demandFolder = path.join(storageRoot, 'demandas', sanitizeStorageSegment(req.params.id, 'sem-demanda'))
+    await fs.rm(demandFolder, { recursive: true, force: true }).catch(() => null)
+
+    return res.json({ ok: true })
+  } catch (error) {
+    const forbidden = error instanceof Error && error.message.includes('Acesso restrito')
+    return res.status(forbidden ? 403 : 500).json({
+      message: forbidden ? 'Esta demanda pertence ao workspace de outro QA.' : 'Nao foi possivel excluir a demanda.',
+      detail: error instanceof Error ? error.message : 'Erro desconhecido',
+    })
+  }
+})
+
 router.post('/:id/tarefas', async (req, res) => {
   try {
     await ensureDemandasSchema()
@@ -603,13 +657,14 @@ router.post('/:id/tarefas', async (req, res) => {
     request.input('demandaId', sql.NVarChar(120), req.params.id)
     request.input('titulo', sql.NVarChar(250), titulo)
     request.input('descricao', sql.NVarChar(sql.MAX), normalizeString(req.body?.descricao))
+    request.input('portalId', sql.Int, toNullableInt(req.body?.portalId))
     request.input('areaId', sql.Int, toNullableInt(req.body?.areaId))
     request.input('moduloId', sql.Int, toNullableInt(req.body?.moduleId))
     request.input('status', sql.NVarChar(40), normalizeTarefaStatus(req.body?.status))
     request.input('ordem', sql.Int, nextOrder)
     await request.query(`
-      INSERT INTO dbo.DemandaTarefas (Id, DemandaId, Titulo, Descricao, AreaId, ModuloId, Status, Ordem)
-      VALUES (@id, @demandaId, @titulo, @descricao, @areaId, @moduloId, @status, @ordem)
+      INSERT INTO dbo.DemandaTarefas (Id, DemandaId, Titulo, Descricao, PortalId, AreaId, ModuloId, Status, Ordem)
+      VALUES (@id, @demandaId, @titulo, @descricao, @portalId, @areaId, @moduloId, @status, @ordem)
     `)
 
     const result = await createRequest(pool)
@@ -617,9 +672,11 @@ router.post('/:id/tarefas', async (req, res) => {
       .query(`
         SELECT
           t.*,
+          pp.Nome AS PortalName,
           a.Nome AS AreaName,
           m.Nome AS ModuleName
         FROM dbo.DemandaTarefas t
+        LEFT JOIN dbo.ProjetoPortais pp ON pp.Id = t.PortalId
         LEFT JOIN dbo.Areas a ON a.Id = t.AreaId
         LEFT JOIN dbo.Modulos m ON m.Id = t.ModuloId
         WHERE t.Id = @id
@@ -645,12 +702,14 @@ router.patch('/:id/tarefas/:tarefaId', async (req, res) => {
     request.input('tarefaId', sql.NVarChar(120), req.params.tarefaId)
     request.input('titulo', sql.NVarChar(250), hasOwn(req.body, 'titulo') ? normalizeString(req.body?.titulo) : null)
     request.input('descricao', sql.NVarChar(sql.MAX), hasOwn(req.body, 'descricao') ? normalizeString(req.body?.descricao) : null)
+    request.input('portalId', sql.Int, hasOwn(req.body, 'portalId') ? toNullableInt(req.body?.portalId) : null)
     request.input('areaId', sql.Int, hasOwn(req.body, 'areaId') ? toNullableInt(req.body?.areaId) : null)
     request.input('moduloId', sql.Int, hasOwn(req.body, 'moduleId') ? toNullableInt(req.body?.moduleId) : null)
     request.input('status', sql.NVarChar(40), hasOwn(req.body, 'status') ? normalizeTarefaStatus(req.body?.status) : null)
     request.input('ordem', sql.Int, hasOwn(req.body, 'ordem') && Number.isFinite(Number(req.body?.ordem)) ? Number(req.body.ordem) : null)
     request.input('hasTitulo', sql.Bit, hasOwn(req.body, 'titulo'))
     request.input('hasDescricao', sql.Bit, hasOwn(req.body, 'descricao'))
+    request.input('hasPortalId', sql.Bit, hasOwn(req.body, 'portalId'))
     request.input('hasAreaId', sql.Bit, hasOwn(req.body, 'areaId'))
     request.input('hasModuloId', sql.Bit, hasOwn(req.body, 'moduleId'))
 
@@ -663,6 +722,7 @@ router.patch('/:id/tarefas/:tarefaId', async (req, res) => {
       SET
         Titulo = CASE WHEN @hasTitulo = 1 THEN @titulo ELSE Titulo END,
         Descricao = CASE WHEN @hasDescricao = 1 THEN @descricao ELSE Descricao END,
+        PortalId = CASE WHEN @hasPortalId = 1 THEN @portalId ELSE PortalId END,
         AreaId = CASE WHEN @hasAreaId = 1 THEN @areaId ELSE AreaId END,
         ModuloId = CASE WHEN @hasModuloId = 1 THEN @moduloId ELSE ModuloId END,
         Status = COALESCE(@status, Status),
@@ -677,9 +737,11 @@ router.patch('/:id/tarefas/:tarefaId', async (req, res) => {
       .query(`
         SELECT
           t.*,
+          pp.Nome AS PortalName,
           a.Nome AS AreaName,
           m.Nome AS ModuleName
         FROM dbo.DemandaTarefas t
+        LEFT JOIN dbo.ProjetoPortais pp ON pp.Id = t.PortalId
         LEFT JOIN dbo.Areas a ON a.Id = t.AreaId
         LEFT JOIN dbo.Modulos m ON m.Id = t.ModuloId
         WHERE t.Id = @tarefaId
