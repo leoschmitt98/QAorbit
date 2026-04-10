@@ -17,7 +17,7 @@ import {
   useDemandaDetailQuery,
   useDemandaScenarioDetailQuery,
 } from '@/services/demandas-api'
-import type { DemandaCenarioRecord, DemandaCenarioStatus, DemandaCenarioTipo } from '@/types/domain'
+import type { DemandaCenarioRecord, DemandaCenarioStatus } from '@/types/domain'
 
 const selectClass =
   'h-12 w-full rounded-2xl border border-border bg-black/20 px-4 text-sm text-foreground outline-none focus:border-accent/40'
@@ -89,6 +89,8 @@ export function DemandaScenarioPage() {
   const detail = detailQuery.data
   const task = detail?.tarefas.find((item) => item.id === tarefaId)
   const isNew = cenarioId === 'novo'
+  const fallbackScenario = !isNew ? task?.cenarios?.find((item) => item.id === cenarioId) ?? null : null
+  const resolvedScenario = scenarioQuery.data ?? fallbackScenario
 
   useEffect(() => {
     if (isNew) {
@@ -101,14 +103,14 @@ export function DemandaScenarioPage() {
       return
     }
 
-    if (!scenarioQuery.data) return
+    if (!resolvedScenario) return
     setScenarioDraft({
-      ...scenarioQuery.data,
-      evidencias: scenarioQuery.data.evidencias ?? [],
-      frames: scenarioQuery.data.frames ?? [],
+      ...resolvedScenario,
+      evidencias: resolvedScenario.evidencias ?? [],
+      frames: resolvedScenario.frames ?? [],
     })
-    setOrdem(String((scenarioQuery.data.evidencias?.length || 0) + 1))
-  }, [demandaId, tarefaId, isNew, scenarioQuery.data])
+    setOrdem(String((resolvedScenario.evidencias?.length || 0) + 1))
+  }, [demandaId, tarefaId, isNew, resolvedScenario])
 
   if (detailQuery.isLoading || (!isNew && scenarioQuery.isLoading)) {
     return <LoadingState />
@@ -123,11 +125,15 @@ export function DemandaScenarioPage() {
     )
   }
 
-  if (!isNew && !scenarioQuery.data) {
+  if (!isNew && !resolvedScenario) {
     return (
       <Card className="space-y-3">
         <p className="font-semibold text-foreground">Cenario nao encontrado</p>
-        <p className="text-sm text-muted">O cenario pode ter sido removido ou nao estar acessivel neste workspace.</p>
+        <p className="text-sm text-muted">
+          {scenarioQuery.error instanceof Error
+            ? scenarioQuery.error.message
+            : 'O cenario pode ter sido removido ou nao estar acessivel neste workspace.'}
+        </p>
       </Card>
     )
   }
@@ -153,7 +159,6 @@ export function DemandaScenarioPage() {
         const created = await createDemandaCenario(demandaId, tarefaId, {
           titulo: scenarioDraft.titulo,
           descricao: scenarioDraft.descricao,
-          tipo: scenarioDraft.tipo,
           status: scenarioDraft.status,
           observacoes: scenarioDraft.observacoes,
         })
@@ -166,7 +171,6 @@ export function DemandaScenarioPage() {
       await updateDemandaCenario(demandaId, tarefaId, cenarioId || '', {
         titulo: scenarioDraft.titulo,
         descricao: scenarioDraft.descricao,
-        tipo: scenarioDraft.tipo,
         status: scenarioDraft.status,
         observacoes: scenarioDraft.observacoes,
       })
@@ -269,7 +273,6 @@ export function DemandaScenarioPage() {
           </div>
           {!isNew ? (
             <div className="flex flex-wrap gap-2">
-              <StatusBadge value={scenarioDraft.tipo} />
               <StatusBadge value={scenarioDraft.status} />
             </div>
           ) : null}
@@ -282,26 +285,13 @@ export function DemandaScenarioPage() {
           <h2 className="font-display text-2xl font-bold text-foreground">Escopo funcional</h2>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[1.25fr,220px,180px] xl:items-end">
+        <div className="grid gap-4 xl:grid-cols-[1.25fr,220px] xl:items-end">
           <Field label="Titulo">
             <Input
               value={scenarioDraft.titulo}
               onChange={(event) => setScenarioDraft((current) => ({ ...current, titulo: event.target.value }))}
               placeholder="Ex.: Parametro marcado"
             />
-          </Field>
-
-          <Field label="Tipo">
-            <select
-              value={scenarioDraft.tipo}
-              onChange={(event) =>
-                setScenarioDraft((current) => ({ ...current, tipo: event.target.value as DemandaCenarioTipo }))
-              }
-              className={selectClass}
-            >
-              <option value="auxiliar">Auxiliar</option>
-              <option value="principal">Principal</option>
-            </select>
           </Field>
 
           <Field label="Status">

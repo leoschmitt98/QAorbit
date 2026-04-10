@@ -518,7 +518,6 @@ function TaskTreeCard({
   }, [task.id, task.titulo, task.descricao, task.portalId, task.moduleId, task.status, task.ordem])
 
   const scenarioCount = task.cenarios?.length || 0
-  const principalCount = task.cenarios?.filter((scenario) => scenario.tipo === 'principal').length || 0
 
   return (
     <TreeNode
@@ -621,9 +620,6 @@ function TaskTreeCard({
             meta={
               <>
                 <span className="text-sm text-foreground">{scenarioCount} total</span>
-                <span className="text-xs uppercase tracking-[0.14em] text-muted">
-                  {principalCount} principal / {Math.max(0, scenarioCount - principalCount)} auxiliares
-                </span>
                 <Button onClick={onCreateScenario}>Adicionar cenario</Button>
               </>
             }
@@ -684,7 +680,7 @@ function ScenarioSummaryCard({
 }) {
   return (
     <TreeNode
-      label={scenario.tipo === 'principal' ? 'Cenario principal' : 'Cenario auxiliar'}
+      label="Cenario"
       meta={
         <>
           <button
@@ -716,10 +712,10 @@ function ScenarioSummaryCard({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-4">
-            <InfoPill label="Tipo" value={scenario.tipo === 'principal' ? 'Principal' : 'Auxiliar'} />
             <InfoPill label="Status" value={scenario.status} />
             <InfoPill label="Evidencias" value={String(scenario.evidencias?.length || 0)} />
             <InfoPill label="Quadros" value={String(scenario.frames?.length || 0)} />
+            <InfoPill label="Atualizado" value={new Date(scenario.updatedAt).toLocaleDateString('pt-BR')} />
           </div>
 
           <div className="flex flex-wrap gap-3">
