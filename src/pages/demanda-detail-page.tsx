@@ -17,6 +17,7 @@ import {
   deleteDemanda,
   deleteDemandaCenario,
   deleteDemandaTarefa,
+  downloadDemandaCenariosDocx,
   updateDemanda,
   updateDemandaTarefa,
   useDemandaDetailQuery,
@@ -101,6 +102,8 @@ export function DemandaDetailPage() {
   const [busyScenarioId, setBusyScenarioId] = useState('')
   const [expandedTaskIds, setExpandedTaskIds] = useState<string[]>([])
   const [expandedScenarioIds, setExpandedScenarioIds] = useState<string[]>([])
+  const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([])
+  const [isExportingScenariosDoc, setIsExportingScenariosDoc] = useState(false)
 
   useEffect(() => {
     if (!detailQuery.data) return
@@ -163,6 +166,12 @@ export function DemandaDetailPage() {
 
   function toggleScenario(scenarioId: string) {
     setExpandedScenarioIds((current) =>
+      current.includes(scenarioId) ? current.filter((id) => id !== scenarioId) : [...current, scenarioId],
+    )
+  }
+
+  function toggleSelectedScenario(scenarioId: string) {
+    setSelectedScenarioIds((current) =>
       current.includes(scenarioId) ? current.filter((id) => id !== scenarioId) : [...current, scenarioId],
     )
   }
@@ -267,6 +276,23 @@ export function DemandaDetailPage() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir a demanda.')
       setIsDeletingDemand(false)
+    }
+  }
+
+  async function handleExportSelectedScenarios() {
+    if (selectedScenarioIds.length === 0) {
+      setMessage('Selecione ao menos um cenario para gerar o documento.')
+      return
+    }
+
+    setIsExportingScenariosDoc(true)
+    try {
+      const result = await downloadDemandaCenariosDocx(demandaId, selectedScenarioIds)
+      setMessage(`Documento dos cenarios gerado com sucesso: ${result.fileName}.`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Nao foi possivel gerar o documento dos cenarios.')
+    } finally {
+      setIsExportingScenariosDoc(false)
     }
   }
 
@@ -428,6 +454,20 @@ export function DemandaDetailPage() {
           </span>
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white/[0.02] px-4 py-3">
+          <p className="text-sm text-muted">
+            Selecione os cenarios que devem entrar no Word com os passos extraidos dos GIFs.
+          </p>
+          <Button
+            onClick={() => void handleExportSelectedScenarios()}
+            disabled={isExportingScenariosDoc || selectedScenarioIds.length === 0}
+          >
+            {isExportingScenariosDoc
+              ? 'Gerando documento...'
+              : `Gerar DOC dos cenarios (${selectedScenarioIds.length})`}
+          </Button>
+        </div>
+
         <div className="space-y-5">
           {detail.tarefas.length > 0 ? (
             detail.tarefas.map((task) => (
@@ -441,8 +481,10 @@ export function DemandaDetailPage() {
                 busyScenarioId={busyScenarioId}
                 expanded={expandedTaskIds.includes(task.id)}
                 expandedScenarioIds={expandedScenarioIds}
+                selectedScenarioIds={selectedScenarioIds}
                 onToggle={() => toggleTask(task.id)}
                 onToggleScenario={toggleScenario}
+                onToggleSelectedScenario={toggleSelectedScenario}
                 onOpenScenario={(scenarioId) => navigate(`/demandas/${demandaId}/tarefas/${task.id}/cenarios/${scenarioId}`)}
                 onCreateScenario={() => navigate(`/demandas/${demandaId}/tarefas/${task.id}/cenarios/novo`)}
                 onSaveTask={(payload) => void handleSaveTask(task.id, payload)}
@@ -470,8 +512,10 @@ function TaskTreeCard({
   busyScenarioId,
   expanded,
   expandedScenarioIds,
+  selectedScenarioIds,
   onToggle,
   onToggleScenario,
+  onToggleSelectedScenario,
   onOpenScenario,
   onCreateScenario,
   onSaveTask,
@@ -486,8 +530,10 @@ function TaskTreeCard({
   busyScenarioId: string
   expanded: boolean
   expandedScenarioIds: string[]
+  selectedScenarioIds: string[]
   onToggle: () => void
   onToggleScenario: (scenarioId: string) => void
+  onToggleSelectedScenario: (scenarioId: string) => void
   onOpenScenario: (scenarioId: string) => void
   onCreateScenario: () => void
   onSaveTask: (payload: {
@@ -633,8 +679,10 @@ function TaskTreeCard({
                     taskId={task.id}
                     scenario={scenario}
                     expanded={expandedScenarioIds.includes(scenario.id)}
+                    selected={selectedScenarioIds.includes(scenario.id)}
                     busy={busyScenarioId === scenario.id}
                     onToggle={() => onToggleScenario(scenario.id)}
+                    onToggleSelected={() => onToggleSelectedScenario(scenario.id)}
                     onOpen={() => onOpenScenario(scenario.id)}
                     onDelete={() => onDeleteScenario(scenario.id)}
                   />
@@ -664,8 +712,10 @@ function TaskTreeCard({
 function ScenarioSummaryCard({
   scenario,
   expanded,
+  selected,
   busy,
   onToggle,
+  onToggleSelected,
   onOpen,
   onDelete,
 }: {
@@ -673,8 +723,10 @@ function ScenarioSummaryCard({
   taskId: string
   scenario: DemandaCenarioRecord
   expanded: boolean
+  selected: boolean
   busy: boolean
   onToggle: () => void
+  onToggleSelected: () => void
   onOpen: () => void
   onDelete: () => void
 }) {
@@ -683,6 +735,15 @@ function ScenarioSummaryCard({
       label="Cenario"
       meta={
         <>
+          <label className="inline-flex items-center gap-2 rounded-full border border-border bg-black/20 px-3 py-1 text-xs font-semibold text-foreground">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={onToggleSelected}
+              className="h-4 w-4 rounded border-border bg-black/20 accent-[#a3ff12]"
+            />
+            DOC
+          </label>
           <button
             type="button"
             onClick={onToggle}

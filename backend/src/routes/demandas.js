@@ -2,6 +2,15 @@ import { Router } from 'express'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  AlignmentType,
+  BorderStyle,
+  Document,
+  ImageRun,
+  Packer,
+  Paragraph,
+  TextRun,
+} from 'docx'
 import { canAccessOwnedRecord, resolveWorkspaceScope } from '../lib/auth.js'
 import { createRequest, getPool, sql } from '../db.js'
 
@@ -142,6 +151,78 @@ async function loadScenarioFrames(demandaId, tarefaId, cenarioId) {
   const metadataPath = path.join(framesDirectory, 'metadata.json')
   const metadata = await readFrameMetadata(metadataPath)
   return metadata.map((entry) => mapScenarioFrameEntry(demandaId, tarefaId, cenarioId, entry))
+}
+
+function scenarioFramePath(demandaId, tarefaId, cenarioId, fileName) {
+  return path.join(
+    storageRoot,
+    'demandas',
+    sanitizeStorageSegment(demandaId, 'sem-demanda'),
+    'tarefas',
+    sanitizeStorageSegment(tarefaId, 'sem-tarefa'),
+    'cenarios',
+    sanitizeStorageSegment(cenarioId, 'sem-cenario'),
+    'quadros',
+    sanitizeStorageSegment(fileName, 'quadro.png'),
+  )
+}
+
+function buildDemandDocumentTitle(text) {
+  return new Paragraph({
+    children: [new TextRun({ text: text.toUpperCase(), bold: true, color: '111827', size: 34 })],
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 260 },
+  })
+}
+
+function buildDemandSectionSeparator() {
+  return new Paragraph({
+    border: {
+      bottom: {
+        style: BorderStyle.SINGLE,
+        color: 'CBD2D9',
+        size: 6,
+        space: 1,
+      },
+    },
+    spacing: { before: 260, after: 110 },
+  })
+}
+
+function buildDemandSectionTitle(text) {
+  return new Paragraph({
+    children: [new TextRun({ text: text.toUpperCase(), bold: true, color: '1F2933', size: 26 })],
+    spacing: { before: 100, after: 140 },
+  })
+}
+
+function buildDemandStepTitle(text, spacing = { before: 220, after: 120 }) {
+  return new Paragraph({
+    children: [new TextRun({ text: text.toUpperCase(), bold: true, color: '1F2933', size: 23 })],
+    spacing,
+  })
+}
+
+function buildDemandMultilineParagraphs(value, options = {}) {
+  const lines = normalizeString(value)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const finalLines = lines.length > 0 ? lines : ['-']
+
+  return finalLines.map((line) => new Paragraph({ text: line, ...options }))
+}
+
+function buildDemandLabeledBlock(label, value) {
+  return [
+    new Paragraph({
+      children: [
+        new TextRun({ text: `${label}: `, bold: true, color: '1F2933' }),
+        new TextRun({ text: normalizeString(value) || '-' }),
+      ],
+      spacing: { after: 90 },
+    }),
+  ]
 }
 
 function normalizeDemandaStatus(value) {
@@ -601,6 +682,133 @@ router.get('/:id/cenarios', async (req, res) => {
     const forbidden = error instanceof Error && error.message.includes('Acesso restrito')
     return res.status(forbidden ? 403 : 500).json({
       message: forbidden ? 'Esta demanda pertence ao workspace de outro QA.' : 'Nao foi possivel listar os cenarios da demanda.',
+      detail: error instanceof Error ? error.message : 'Erro desconhecido',
+    })
+  }
+})
+
+router.post('/:id/export-cenarios-docx', async (req, res) => {
+  try {
+    await ensureDemandasSchema()
+    const demanda = await loadOwnedDemanda(req.params.id, req.auth)
+    const scenarioIds = Array.isArray(req.body?.scenarioIds)
+      ? req.body.scenarioIds.map((id) => normalizeString(id)).filter(Boolean)
+      : []
+
+    if (scenarioIds.length === 0) {
+      return res.status(400).json({ message: 'Selecione ao menos um cenario para gerar o documento.' })
+    }
+
+    const pool = await getPool()
+    const request = createRequest(pool)
+    request.input('demandaId', sql.NVarChar(120), req.params.id)
+    request.input('scenarioIdsJson', sql.NVarChar(sql.MAX), JSON.stringify(scenarioIds))
+    const result = await request.query(`
+      SELECT
+        c.*,
+        t.Titulo AS TarefaTitulo,
+        t.Ordem AS TarefaOrdem,
+        pp.Nome AS PortalName,
+        m.Nome AS ModuleName
+      FROM dbo.DemandaCenarios c
+      INNER JOIN dbo.DemandaTarefas t ON t.Id = c.DemandaTarefaId
+      LEFT JOIN dbo.ProjetoPortais pp ON pp.Id = t.PortalId
+      LEFT JOIN dbo.Modulos m ON m.Id = t.ModuloId
+      INNER JOIN OPENJSON(@scenarioIdsJson) selected ON selected.value = c.Id
+      WHERE c.DemandaId = @demandaId
+      ORDER BY t.Ordem, c.CriadoEm
+    `)
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: 'Nenhum cenario selecionado foi encontrado nesta demanda.' })
+    }
+
+    const children = [
+      buildDemandDocumentTitle('Cenarios de Validacao'),
+      buildDemandSectionSeparator(),
+      buildDemandSectionTitle('Demanda'),
+      ...buildDemandLabeledBlock('Titulo', demanda.Titulo),
+      ...buildDemandLabeledBlock('Projeto', demanda.ProjectName),
+      ...buildDemandLabeledBlock('Status', demanda.Status),
+      ...buildDemandLabeledBlock('Prioridade', demanda.Prioridade),
+      ...buildDemandMultilineParagraphs(demanda.Descricao || 'Sem descricao informada.', { spacing: { after: 120 } }),
+      buildDemandSectionSeparator(),
+      buildDemandSectionTitle('Cenarios Selecionados'),
+    ]
+
+    for (let scenarioIndex = 0; scenarioIndex < result.recordset.length; scenarioIndex += 1) {
+      const row = result.recordset[scenarioIndex]
+      const cenario = mapCenario(row)
+      const frames = await loadScenarioFrames(req.params.id, row.DemandaTarefaId, row.Id)
+
+      children.push(
+        buildDemandStepTitle(`CENARIO ${scenarioIndex + 1} - ${cenario.titulo}`, {
+          before: scenarioIndex === 0 ? 120 : 280,
+          after: 110,
+        }),
+      )
+      children.push(...buildDemandLabeledBlock('Tarefa', `${row.TarefaOrdem || '-'} - ${row.TarefaTitulo || '-'}`))
+      children.push(...buildDemandLabeledBlock('Portal', row.PortalName || '-'))
+      children.push(...buildDemandLabeledBlock('Modulo', row.ModuleName || '-'))
+      children.push(...buildDemandLabeledBlock('Status', cenario.status))
+      children.push(...buildDemandMultilineParagraphs(cenario.descricao || 'Sem descricao informada.', { spacing: { after: 90 } }))
+
+      if (cenario.observacoes) {
+        children.push(...buildDemandLabeledBlock('Observacoes', cenario.observacoes))
+      }
+
+      if (frames.length === 0) {
+        children.push(new Paragraph({ text: 'Nenhum quadro foi extraido para este cenario.', spacing: { after: 140 } }))
+        continue
+      }
+
+      for (let frameIndex = 0; frameIndex < frames.length; frameIndex += 1) {
+        const frame = frames[frameIndex]
+        if (!frame.fileName) continue
+
+        const imageBuffer = await fs.readFile(scenarioFramePath(req.params.id, row.DemandaTarefaId, row.Id, frame.fileName))
+        children.push(buildDemandStepTitle(`PASSO ${frameIndex + 1}`, { before: 180, after: 90 }))
+        children.push(
+          new Paragraph({
+            children: [
+              new ImageRun({
+                data: imageBuffer,
+                transformation: { width: 520, height: 293 },
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: frame.description ? 90 : 180 },
+          }),
+        )
+
+        if (frame.description) {
+          children.push(
+            ...buildDemandMultilineParagraphs(frame.description, {
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 160 },
+            }),
+          )
+        }
+      }
+    }
+
+    const doc = new Document({ sections: [{ children }] })
+    const buffer = await Packer.toBuffer(doc)
+    const safeDemandaId = sanitizeStorageSegment(req.params.id, 'sem-demanda')
+    const fileName = `cenarios-${safeDemandaId}.docx`
+    const filePath = path.join(storageRoot, 'demandas', safeDemandaId, fileName)
+
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, buffer)
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
+    res.setHeader('Content-Length', String(buffer.length))
+    return res.send(buffer)
+  } catch (error) {
+    const forbidden = error instanceof Error && error.message.includes('Acesso restrito')
+    return res.status(forbidden ? 403 : 500).json({
+      message: forbidden ? 'Esta demanda pertence ao workspace de outro QA.' : 'Nao foi possivel gerar o documento dos cenarios.',
       detail: error instanceof Error ? error.message : 'Erro desconhecido',
     })
   }

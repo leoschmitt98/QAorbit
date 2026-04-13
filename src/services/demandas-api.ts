@@ -150,6 +150,34 @@ export async function deleteDemanda(demandaId: string) {
   return parseJson<{ ok: true }>(response)
 }
 
+export async function downloadDemandaCenariosDocx(demandaId: string, scenarioIds: string[]) {
+  const response = await fetch(`/api/demandas/${encodeURIComponent(demandaId)}/export-cenarios-docx`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scenarioIds }),
+  })
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null)
+    throw new Error(errorBody?.message || 'Nao foi possivel gerar o documento dos cenarios.')
+  }
+
+  const blob = await response.blob()
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const fileNameMatch = disposition.match(/filename="?([^"]+)"?/i)
+  const fileName = fileNameMatch?.[1] || `cenarios-${demandaId}.docx`
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = fileName
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+
+  return { fileName }
+}
+
 export async function createDemandaTarefa(demandaId: string, payload: CreateDemandaTarefaPayload) {
   const response = await fetch(`/api/demandas/${encodeURIComponent(demandaId)}/tarefas`, {
     method: 'POST',

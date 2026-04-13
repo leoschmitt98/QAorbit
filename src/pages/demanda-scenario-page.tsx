@@ -83,7 +83,7 @@ export function DemandaScenarioPage() {
   const [legenda, setLegenda] = useState('')
   const [ordem, setOrdem] = useState('1')
   const [message, setMessage] = useState(
-    'Use esta tela para concentrar o cenario: dados funcionais, evidencias e narrativa visual por GIF/quadros.',
+    'Use esta tela para concentrar o cenario: preencha os dados, crie o registro e em seguida suba o GIF para extrair os passos.',
   )
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -255,7 +255,7 @@ export function DemandaScenarioPage() {
       <SectionHeader
         eyebrow="Demandas"
         title={isNew ? 'Novo cenario' : scenarioDraft.titulo || 'Detalhe do cenario'}
-        description="Tela dedicada para montar o cenario com calma: dados do fluxo, evidencias anexadas e narracao visual por GIF/quadros."
+        description="Tela dedicada para montar o cenario: dados do fluxo, GIF, quadros extraidos e evidencias anexadas."
         action={
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => navigate(`/demandas/${demandaId}`)}>
@@ -333,7 +333,7 @@ export function DemandaScenarioPage() {
 
         <div className="flex flex-wrap gap-3">
           <Button onClick={() => void handleSaveScenario()} disabled={isSaving}>
-            {isSaving ? 'Salvando...' : isNew ? 'Criar cenario' : 'Salvar cenario'}
+            {isSaving ? 'Salvando...' : isNew ? 'Criar cenario e abrir GIF' : 'Salvar cenario'}
           </Button>
           <Button variant="secondary" onClick={() => void handleDeleteScenario()} disabled={isDeleting}>
             {isDeleting ? 'Excluindo...' : isNew ? 'Cancelar' : 'Excluir cenario'}
@@ -427,8 +427,18 @@ export function DemandaScenarioPage() {
           </Card>
         </>
       ) : (
-        <Card className="rounded-3xl border border-dashed border-border bg-white/[0.02] p-6 text-sm text-muted">
-          Crie o cenario primeiro. Depois desta gravacao inicial, a tela libera upload de GIF, extracao de quadros e anexos de evidencia.
+        <Card className="space-y-4 rounded-3xl border border-dashed border-accent/25 bg-accent/5 p-6">
+          <div>
+            <p className="text-sm text-muted">Proximo passo</p>
+            <h3 className="font-display text-xl font-bold text-foreground">GIF e passos do cenario</h3>
+            <p className="mt-2 text-sm text-muted">
+              Para salvar os quadros em disco, primeiro precisamos criar o cenario e gerar seu ID. Clique em
+              `Criar cenario e abrir GIF`; em seguida esta mesma tela libera o upload do GIF, player, extracao dos quadros e descricoes dos passos.
+            </p>
+          </div>
+          <Button onClick={() => void handleSaveScenario()} disabled={isSaving}>
+            {isSaving ? 'Criando...' : 'Criar cenario e abrir captura visual'}
+          </Button>
         </Card>
       )}
     </div>
