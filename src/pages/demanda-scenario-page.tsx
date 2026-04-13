@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { DemandaScenarioEvidenceCapture } from '@/components/shared/demanda-scenario-evidence-capture'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -70,10 +70,13 @@ const emptyScenario: DemandaCenarioRecord = {
 
 export function DemandaScenarioPage() {
   const { demandaId = '', tarefaId = '', cenarioId } = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const normalizedPathname = location.pathname.replace(/\/+$/, '')
+  const isNew = cenarioId === 'novo' || normalizedPathname.endsWith('/cenarios/novo')
   const detailQuery = useDemandaDetailQuery(demandaId)
-  const scenarioQuery = useDemandaScenarioDetailQuery(demandaId, tarefaId, cenarioId)
+  const scenarioQuery = useDemandaScenarioDetailQuery(demandaId, tarefaId, isNew ? undefined : cenarioId)
 
   const [scenarioDraft, setScenarioDraft] = useState<DemandaCenarioRecord>(emptyScenario)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -88,7 +91,6 @@ export function DemandaScenarioPage() {
 
   const detail = detailQuery.data
   const task = detail?.tarefas.find((item) => item.id === tarefaId)
-  const isNew = cenarioId === 'novo'
   const fallbackScenario = !isNew ? task?.cenarios?.find((item) => item.id === cenarioId) ?? null : null
   const resolvedScenario = scenarioQuery.data ?? fallbackScenario
 
