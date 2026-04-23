@@ -17,6 +17,7 @@ const items = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/agents', label: 'Central de Agentes', icon: Bot },
   { to: '/analysis/new', label: 'Nova Analise', icon: Workflow },
+  { to: '/automation/blueprint', label: 'Blueprint de Automacao', icon: Bot },
   { to: '/flows/history', label: 'Historico de Fluxos', icon: History },
   { to: '/historical-tests', label: 'Historico de Testes', icon: History },
   { to: '/projects', label: 'Projetos', icon: FolderKanban },

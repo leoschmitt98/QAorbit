@@ -5,6 +5,7 @@ import { BugDetailPage } from '@/pages/bug-detail-page'
 import { BugsPage } from '@/pages/bugs-page'
 import { CentralAgentsPage } from '@/pages/central-agents-page'
 import { DashboardPage } from '@/pages/dashboard-page'
+import { AutomationBlueprintPage } from '@/pages/automation-blueprint-page'
 import { DemandaDetailPage } from '@/pages/demanda-detail-page'
 import { DemandaScenarioPage } from '@/pages/demanda-scenario-page'
 import { DemandasPage } from '@/pages/demandas-page'
@@ -51,6 +52,7 @@ const router = createBrowserRouter([
       { index: true, element: <DashboardPage /> },
       { path: 'agents', element: <CentralAgentsPage /> },
       { path: 'analysis/new', element: <NewAnalysisPage /> },
+      { path: 'automation/blueprint', element: <AutomationBlueprintPage /> },
       { path: 'flows/history', element: <FlowHistoryPage /> },
       { path: 'historical-tests', element: <HistoricalTestsPage /> },
       { path: 'historical-tests/:recordId', element: <HistoricalTestDetailPage /> },
