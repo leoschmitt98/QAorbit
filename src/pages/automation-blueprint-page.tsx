@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { useMemo, useState } from 'react'
-import { Copy, Download, FileJson, FileText, MoveDown, MoveUp, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Copy, Download, FileJson, FileText, MoveDown, MoveUp, Plus, Trash2, Upload } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { StatusBadge } from '@/components/ui/status-badge'
 import type { AutomationActionType, AutomationBlueprint, AutomationBlueprintStep } from '@/types/automation-blueprint'
 import { downloadBlueprintDocx, downloadBlueprintJson, downloadBlueprintMarkdown } from '@/utils/automation-blueprint-export'
-import { buildCypressLine, suggestSelector } from '@/utils/selector-suggestion'
+import { buildCypressLine, extractContextFromHtml, suggestSelector } from '@/utils/selector-suggestion'
 import { cn } from '@/utils/cn'
 
 const actionOptions: Array<{ value: AutomationActionType; label: string }> = [
@@ -23,6 +23,23 @@ const actionOptions: Array<{ value: AutomationActionType; label: string }> = [
   { value: 'wait', label: 'Wait' },
   { value: 'navigate', label: 'Navigate' },
 ]
+
+const STORAGE_KEY = 'qa-orbit-automation-blueprint-draft'
+
+function isHtmlSnippet(value: string) {
+  return String(value || '').trim().startsWith('<')
+}
+
+function isFriendlyElementType(value: string) {
+  const normalized = String(value || '').toLowerCase()
+  return (
+    normalized.includes('caixa') ||
+    normalized.includes('combo') ||
+    normalized.includes('select') ||
+    normalized.includes('mensagem') ||
+    normalized.includes('alerta')
+  )
+}
 
 function createHydratedStep(step: Partial<AutomationBlueprintStep> & Pick<AutomationBlueprintStep, 'id' | 'order'>): AutomationBlueprintStep {
   const baseStep: AutomationBlueprintStep = {
@@ -54,13 +71,37 @@ function createHydratedStep(step: Partial<AutomationBlueprintStep> & Pick<Automa
     needsManualReview: true,
   }
 
-  const suggestion = suggestSelector(baseStep, baseStep.action, baseStep.typedValue, baseStep.expectedStepResult)
-  const preferredSelector = baseStep.manualSelector || suggestion.suggestedSelector || suggestion.alternativeSelector
-  const fallbackSelector = baseStep.manualAlternativeSelector || suggestion.alternativeSelector
-  const hasManualSelector = Boolean(baseStep.manualSelector)
+  const htmlFromManualSelector = isHtmlSnippet(baseStep.manualSelector) ? baseStep.manualSelector : ''
+  const htmlFromNotes = isHtmlSnippet(baseStep.notes) ? baseStep.notes : ''
+  const htmlReference = baseStep.htmlReference || htmlFromManualSelector || htmlFromNotes
+  const extractedContext = extractContextFromHtml(htmlReference)
+  const manualSelector = htmlFromManualSelector ? '' : baseStep.manualSelector
+  const manualAlternativeSelector = isHtmlSnippet(baseStep.manualAlternativeSelector) ? '' : baseStep.manualAlternativeSelector
+
+  const mergedStep: AutomationBlueprintStep = {
+    ...baseStep,
+    htmlReference,
+    manualSelector,
+    manualAlternativeSelector,
+    elementType:
+      extractedContext.elementType && (!baseStep.elementType || isFriendlyElementType(baseStep.elementType))
+        ? extractedContext.elementType
+        : baseStep.elementType,
+    visibleText: baseStep.visibleText || extractedContext.visibleText || '',
+    elementId: baseStep.elementId || extractedContext.elementId || '',
+    elementName: baseStep.elementName || extractedContext.elementName || '',
+    dataTestId: baseStep.dataTestId || extractedContext.dataTestId || '',
+    elementClasses:
+      baseStep.elementClasses.length > 0 ? baseStep.elementClasses : extractedContext.elementClasses || [],
+  }
+
+  const suggestion = suggestSelector(mergedStep, mergedStep.action, mergedStep.typedValue, mergedStep.expectedStepResult)
+  const preferredSelector = mergedStep.manualSelector || suggestion.suggestedSelector || suggestion.alternativeSelector
+  const fallbackSelector = mergedStep.manualAlternativeSelector || suggestion.alternativeSelector
+  const hasManualSelector = Boolean(mergedStep.manualSelector)
 
   return {
-    ...baseStep,
+    ...mergedStep,
     ...suggestion,
     suggestedSelector: preferredSelector,
     alternativeSelector: fallbackSelector,
@@ -68,8 +109,7 @@ function createHydratedStep(step: Partial<AutomationBlueprintStep> & Pick<Automa
     selectorReason: hasManualSelector
       ? 'Seletor principal informado manualmente pelo QA com base no DevTools.'
       : suggestion.selectorReason,
-    cypressLine:
-      step.cypressLine || buildCypressLine(baseStep.action, preferredSelector, baseStep.typedValue, baseStep.expectedStepResult),
+    cypressLine: buildCypressLine(mergedStep.action, preferredSelector, mergedStep.typedValue, mergedStep.expectedStepResult),
     needsManualReview: hasManualSelector ? false : suggestion.needsManualReview,
   }
 }
@@ -125,6 +165,39 @@ const exampleBlueprint: AutomationBlueprint = {
   ],
 }
 
+function hydrateBlueprint(blueprint: AutomationBlueprint): AutomationBlueprint {
+  const steps = Array.isArray(blueprint.steps) ? blueprint.steps : []
+
+  return {
+    flowName: blueprint.flowName || '',
+    system: blueprint.system || '',
+    module: blueprint.module || '',
+    objective: blueprint.objective || '',
+    preconditions: blueprint.preconditions || '',
+    testData: blueprint.testData || '',
+    expectedResult: blueprint.expectedResult || '',
+    steps: steps.map((step, index) =>
+      createHydratedStep({
+        ...step,
+        id: step.id || `manual-flow-step-${Date.now()}-${index + 1}`,
+        order: index + 1,
+      }),
+    ),
+  }
+}
+
+function loadStoredBlueprint(): AutomationBlueprint {
+  if (typeof window === 'undefined') return exampleBlueprint
+
+  try {
+    const rawDraft = window.localStorage.getItem(STORAGE_KEY)
+    if (!rawDraft) return exampleBlueprint
+    return hydrateBlueprint(JSON.parse(rawDraft) as AutomationBlueprint)
+  } catch {
+    return exampleBlueprint
+  }
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="grid gap-2 text-sm text-muted">
@@ -135,8 +208,24 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function AutomationBlueprintPage() {
-  const [blueprint, setBlueprint] = useState<AutomationBlueprint>(exampleBlueprint)
-  const [selectedStepId, setSelectedStepId] = useState<string>(exampleBlueprint.steps[0]?.id || '')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const initialBlueprintRef = useRef<AutomationBlueprint | null>(null)
+  if (!initialBlueprintRef.current) {
+    initialBlueprintRef.current = loadStoredBlueprint()
+  }
+
+  const [blueprint, setBlueprint] = useState<AutomationBlueprint>(() => initialBlueprintRef.current || exampleBlueprint)
+  const [selectedStepId, setSelectedStepId] = useState<string>(() => initialBlueprintRef.current?.steps[0]?.id || '')
+  const [saveStatus, setSaveStatus] = useState('Rascunho salvo neste navegador')
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(blueprint))
+      setSaveStatus('Rascunho salvo automaticamente neste navegador')
+    } catch {
+      setSaveStatus('Nao foi possivel salvar automaticamente neste navegador')
+    }
+  }, [blueprint])
 
   const selectedStep = blueprint.steps.find((step) => step.id === selectedStepId) || null
 
@@ -163,6 +252,33 @@ export function AutomationBlueprintPage() {
       return {
         ...current,
         steps: [...current.steps, step],
+      }
+    })
+  }
+
+  function duplicateStep(stepId: string) {
+    setBlueprint((current) => {
+      const sourceIndex = current.steps.findIndex((step) => step.id === stepId)
+      if (sourceIndex < 0) return current
+
+      const sourceStep = current.steps[sourceIndex]
+      const duplicatedStep = createHydratedStep({
+        ...sourceStep,
+        id: `manual-flow-step-${Date.now()}-${current.steps.length + 1}`,
+        order: current.steps.length + 1,
+        title: `${sourceStep.title || `Passo ${sourceStep.order}`} (copia)`,
+      })
+
+      const nextSteps = [
+        ...current.steps,
+        duplicatedStep,
+      ].map((step, index) => createHydratedStep({ ...step, order: index + 1 }))
+
+      setSelectedStepId(duplicatedStep.id)
+
+      return {
+        ...current,
+        steps: nextSteps,
       }
     })
   }
@@ -205,6 +321,22 @@ export function AutomationBlueprintPage() {
     await navigator.clipboard.writeText(consolidatedCypress)
   }
 
+  async function importBlueprintJson(file: File) {
+    try {
+      const content = await file.text()
+      const importedBlueprint = hydrateBlueprint(JSON.parse(content) as AutomationBlueprint)
+      setBlueprint(importedBlueprint)
+      setSelectedStepId(importedBlueprint.steps[0]?.id || '')
+      setSaveStatus('JSON importado e salvo automaticamente neste navegador')
+    } catch {
+      setSaveStatus('Nao foi possivel importar o JSON selecionado')
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
       <SectionHeader
@@ -221,6 +353,10 @@ export function AutomationBlueprintPage() {
               <FileJson className="mr-2 h-4 w-4" />
               Exportar JSON
             </Button>
+            <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="mr-2 h-4 w-4" />
+              Importar JSON
+            </Button>
             <Button variant="secondary" onClick={() => downloadBlueprintMarkdown(blueprint)}>
               <FileText className="mr-2 h-4 w-4" />
               Exportar Markdown
@@ -232,6 +368,21 @@ export function AutomationBlueprintPage() {
           </div>
         }
       />
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) void importBlueprintJson(file)
+        }}
+      />
+
+      <div className="rounded-2xl border border-accent/20 bg-accent/8 px-4 py-3 text-sm text-muted">
+        {saveStatus}. Se recarregar a pagina neste mesmo navegador, o rascunho sera recuperado automaticamente.
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="space-y-6">
@@ -311,6 +462,17 @@ export function AutomationBlueprintPage() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <StatusBadge value={step.selectorConfidence} />
+                      <Button
+                        variant="ghost"
+                        className="h-9 px-3"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          duplicateStep(step.id)
+                        }}
+                        title="Copiar passo"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         className="h-9 px-3"
