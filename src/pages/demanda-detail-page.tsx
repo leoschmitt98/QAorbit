@@ -740,7 +740,7 @@ function ScenarioSummaryCard({
               type="checkbox"
               checked={selected}
               onChange={onToggleSelected}
-              className="h-4 w-4 rounded border-border bg-black/20 accent-[#a3ff12]"
+              className="h-4 w-4 rounded border-border bg-black/20 accent-[#38bdf8]"
             />
             DOC
           </label>

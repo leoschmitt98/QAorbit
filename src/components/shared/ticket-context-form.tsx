@@ -350,11 +350,11 @@ function SelectField({ label, value, onChange, options, loading }: SelectFieldPr
         disabled={loading}
         className="h-12 w-full rounded-2xl border border-border bg-black/20 px-4 text-sm text-foreground outline-none focus:border-accent/40 disabled:opacity-60"
       >
-        <option value="" style={{ backgroundColor: '#09130c', color: '#d8e0d4' }}>
+        <option value="" style={{ backgroundColor: '#07111f', color: '#dbeafe' }}>
           {loading ? 'Carregando...' : 'Selecione'}
         </option>
         {options.map((option) => (
-          <option key={option.value} value={option.value} style={{ backgroundColor: '#09130c', color: '#f5f7f1' }}>
+          <option key={option.value} value={option.value} style={{ backgroundColor: '#07111f', color: '#f8fcff' }}>
             {option.label}
           </option>
         ))}

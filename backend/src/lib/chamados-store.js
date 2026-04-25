@@ -586,6 +586,14 @@ export async function listWorkflowProgress(auth, requestedScope) {
   request.input('scope', sql.NVarChar(10), scope)
   request.input('userId', sql.NVarChar(120), auth?.userId || '')
   const result = await request.query(`
+    SELECT CAST(Id AS VARCHAR(20)) AS projectId
+    FROM dbo.Projetos
+    WHERE Ativo = 1;
+
+    SELECT CAST(Id AS VARCHAR(20)) AS moduleId
+    FROM dbo.Modulos
+    WHERE Ativo = 1;
+
     SELECT
       c.TicketId AS ticketId,
       c.Titulo AS title,
@@ -610,7 +618,10 @@ export async function listWorkflowProgress(auth, requestedScope) {
     ORDER BY c.DataAtualizacao DESC
   `)
 
-  const dbSummaries = result.recordset.map((row) => ({
+  const activeProjectIds = new Set((result.recordsets[0] ?? []).map((row) => String(row.projectId || '')))
+  const activeModuleIds = new Set((result.recordsets[1] ?? []).map((row) => String(row.moduleId || '')))
+
+  const dbSummaries = (result.recordsets[2] ?? []).map((row) => ({
     ...row,
     updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : new Date().toISOString(),
     finalizedAt: row.finalizedAt ? new Date(row.finalizedAt).toISOString() : null,
@@ -622,6 +633,9 @@ export async function listWorkflowProgress(auth, requestedScope) {
 
   const merged = new Map(dbSummaries.map((item) => [item.ticketId, item]))
   for (const legacy of legacySummaries) {
+    if (legacy.projectId && !activeProjectIds.has(String(legacy.projectId))) continue
+    if (legacy.moduleId && !activeModuleIds.has(String(legacy.moduleId))) continue
+
     if (!merged.has(legacy.ticketId)) {
       merged.set(legacy.ticketId, legacy)
     }

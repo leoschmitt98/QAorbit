@@ -497,7 +497,7 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
     if (annotation.type === 'arrow') {
       return (
         <ArrowDown
-          className="absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 text-accent drop-shadow-[0_0_10px_rgba(163,255,18,0.35)]"
+          className="absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 text-accent drop-shadow-[0_0_10px_rgba(56,189,248,0.35)]"
           style={style}
         />
       )
@@ -562,7 +562,7 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
 
         <div
           className={cn(
-            'overflow-hidden rounded-[28px] border border-border bg-[radial-gradient(circle_at_top,rgba(163,255,18,0.08),transparent_55%),rgba(0,0,0,0.45)]',
+            'overflow-hidden rounded-[28px] border border-border bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.08),transparent_55%),rgba(0,0,0,0.45)]',
             isModal ? 'min-h-[70vh]' : 'min-h-[26rem]',
           )}
         >
@@ -672,7 +672,7 @@ export function RetestExecutionForm({ ticketId, value, onChange }: RetestExecuti
             step={1}
             value={currentPlayerFrameIndex}
             onChange={(event) => seekToFrameIndex(Number(event.target.value))}
-            className="h-3 w-full cursor-pointer appearance-none rounded-full bg-border accent-[#a3ff12]"
+            className="h-3 w-full cursor-pointer appearance-none rounded-full bg-border accent-[#38bdf8]"
             disabled={playerFrames.length === 0}
           />
         </div>

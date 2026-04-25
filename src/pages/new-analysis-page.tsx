@@ -1159,7 +1159,7 @@ export function NewAnalysisPage() {
                   type="checkbox"
                   checked={shouldGenerateTestPlanScope}
                   onChange={(event) => setShouldGenerateTestPlanScope(event.target.checked)}
-                  className="h-4 w-4 rounded border-border bg-black/20 accent-[#a3ff12]"
+                  className="h-4 w-4 rounded border-border bg-black/20 accent-[#38bdf8]"
                 />
                 <span>Gerar escopo de Test Plan ao finalizar este chamado</span>
               </label>
@@ -1374,7 +1374,7 @@ export function NewAnalysisPage() {
                                       : current.filter((documentId) => documentId !== document.id),
                                   )
                                 }
-                                className="mt-1 h-4 w-4 rounded border-border bg-black/20 accent-[#a3ff12]"
+                                className="mt-1 h-4 w-4 rounded border-border bg-black/20 accent-[#38bdf8]"
                               />
                               <div>
                                 <p className="font-semibold text-foreground">{document.title}</p>

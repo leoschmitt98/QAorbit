@@ -272,7 +272,7 @@ export function TestPlanDetailPage() {
                 type="checkbox"
                 checked={incluirEmRegressao}
                 onChange={(event) => setIncluirEmRegressao(event.target.checked)}
-                className="h-4 w-4 rounded border-border bg-black/20 accent-[#a3ff12]"
+                className="h-4 w-4 rounded border-border bg-black/20 accent-[#38bdf8]"
               />
               <span>Preparar para incluir em regressao futuramente</span>
             </label>

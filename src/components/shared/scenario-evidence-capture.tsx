@@ -344,7 +344,7 @@ export function ScenarioEvidenceCapture({ ticketId, scenario, onChange }: Scenar
         </div>
       </label>
 
-      <div className="overflow-hidden rounded-[28px] border border-border bg-[radial-gradient(circle_at_top,rgba(163,255,18,0.08),transparent_55%),rgba(0,0,0,0.45)]">
+      <div className="overflow-hidden rounded-[28px] border border-border bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.08),transparent_55%),rgba(0,0,0,0.45)]">
         {currentPlayerFrame ? (
           <img src={currentPlayerFrame.dataUrl} alt="Quadro atual do cenário" className="h-[20rem] w-full object-contain" />
         ) : scenario.gifPreviewUrl ? (

@@ -1,5 +1,7 @@
 import { Router } from 'express'
+import fs from 'node:fs/promises'
 import { createRequest, executeTrustedJson, getPool, queryTrustedJson, sql } from '../db.js'
+import { ticketDirectory } from '../lib/legacy-storage.js'
 
 const router = Router()
 
@@ -185,6 +187,43 @@ function buildProjectDeleteBatch(projectIdExpression, outputJson = false) {
       @DeletedDemandas AS deletedDemandas
     ${outputJson ? 'FOR JSON PATH' : ''}
   `
+}
+
+async function listTicketIdsForProject(pool, projectId) {
+  const request = createRequest(pool)
+  request.input('projectId', sql.Int, projectId)
+  const result = await request.query(`
+    DECLARE @Modules TABLE (Id INT PRIMARY KEY);
+    INSERT INTO @Modules (Id)
+    SELECT Id
+    FROM dbo.Modulos
+    WHERE ProjetoId = @projectId;
+
+    DECLARE @Portals TABLE (Id INT PRIMARY KEY);
+    INSERT INTO @Portals (Id)
+    SELECT Id
+    FROM dbo.ProjetoPortais
+    WHERE ProjetoId = @projectId;
+
+    INSERT INTO @Modules (Id)
+    SELECT Id
+    FROM dbo.Modulos
+    WHERE PortalId IN (SELECT Id FROM @Portals)
+      AND Id NOT IN (SELECT Id FROM @Modules);
+
+    SELECT TicketId
+    FROM dbo.Chamados
+    WHERE ProjetoId = @projectId
+      OR ModuloId IN (SELECT Id FROM @Modules);
+  `)
+
+  return result.recordset.map((row) => String(row.TicketId || '').trim()).filter(Boolean)
+}
+
+async function removeLegacyTicketDirectories(ticketIds) {
+  await Promise.all(
+    ticketIds.map((ticketId) => fs.rm(ticketDirectory(ticketId), { recursive: true, force: true }).catch(() => undefined)),
+  )
 }
 
 async function queryInTransaction(transaction, query, inputs = []) {
@@ -486,6 +525,7 @@ router.delete('/:projectId', async (req, res) => {
       return res.json(normalizeDeleteSummary(rows[0]))
     }
 
+    const legacyTicketIds = await listTicketIdsForProject(pool, projectId)
     const transaction = new sql.Transaction(pool)
     await transaction.begin()
 
@@ -494,6 +534,7 @@ router.delete('/:projectId', async (req, res) => {
       request.input('projectId', sql.Int, projectId)
       const result = await request.query(buildProjectDeleteBatch('@projectId'))
       await transaction.commit()
+      await removeLegacyTicketDirectories(legacyTicketIds)
 
       return res.json(normalizeDeleteSummary(result.recordset[0]))
     } catch (error) {
