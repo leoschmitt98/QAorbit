@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { LoadingState } from '@/components/shared/loading-state'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
+import { useProjectScope } from '@/hooks/use-project-scope'
 import {
   createCatalogModule,
   createCatalogProjectPortal,
+  deleteCatalogProject,
   useCatalogModulesQuery,
   useCatalogProjectPortalsQuery,
   useCatalogProjectsQuery,
@@ -36,7 +38,9 @@ async function fileToDataUrl(file: File) {
 
 export function ProjectDetailPage() {
   const { projectId = '' } = useParams()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { selectedProjectId, setSelectedProjectId } = useProjectScope()
 
   const projectsQuery = useCatalogProjectsQuery()
   const portalsQuery = useCatalogProjectPortalsQuery(projectId)
@@ -63,6 +67,10 @@ export function ProjectDetailPage() {
   const [docFile, setDocFile] = useState<File | null>(null)
   const [docMessage, setDocMessage] = useState('Vincule PDFs, DOCX ou planilhas ao modulo certo para a IA usar a base funcional do projeto.')
   const [isUploadingDoc, setIsUploadingDoc] = useState(false)
+  const [deleteMessage, setDeleteMessage] = useState(
+    'Esta acao remove o projeto, portais, modulos, documentos, chamados, bugs, historicos e test plans vinculados.',
+  )
+  const [isDeletingProject, setIsDeletingProject] = useState(false)
 
   const project = (projectsQuery.data ?? []).find((item) => item.id === projectId) ?? null
   const projectName = project?.nome ?? ''
@@ -204,6 +212,46 @@ export function ProjectDetailPage() {
       setDocMessage(error instanceof Error ? error.message : 'Nao foi possivel salvar o documento funcional.')
     } finally {
       setIsUploadingDoc(false)
+    }
+  }
+
+  async function handleDeleteProject() {
+    const confirmation = window.prompt(
+      `Para excluir "${projectName}" e todos os dados vinculados, digite exatamente o nome do projeto.`,
+    )
+
+    if (confirmation === null) return
+
+    if (confirmation.trim() !== projectName) {
+      setDeleteMessage('Nome digitado diferente do projeto. Nada foi excluido.')
+      return
+    }
+
+    setIsDeletingProject(true)
+    try {
+      const summary = await deleteCatalogProject(projectId)
+      if (selectedProjectId === projectId) {
+        setSelectedProjectId('')
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['catalog-projects'] })
+      await queryClient.invalidateQueries({ queryKey: ['catalog-project-portals', projectId] })
+      await queryClient.invalidateQueries({ queryKey: ['catalog-modules', projectId] })
+      await queryClient.invalidateQueries({ queryKey: ['functional-documents'] })
+      await queryClient.invalidateQueries({ queryKey: ['historical-tests'] })
+      await queryClient.invalidateQueries({ queryKey: ['test-plans'] })
+      await queryClient.invalidateQueries({ queryKey: ['demandas'] })
+
+      navigate('/projects', {
+        replace: true,
+        state: {
+          projectDeleteMessage: `Projeto ${summary.deletedProjectName} excluido com ${summary.deletedPortals} portal(is), ${summary.deletedModules} modulo(s), ${summary.deletedHistoricalTests} historico(s) e ${summary.deletedTestPlans} test plan(s).`,
+        },
+      })
+    } catch (error) {
+      setDeleteMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir o projeto.')
+    } finally {
+      setIsDeletingProject(false)
     }
   }
 
@@ -464,6 +512,26 @@ export function ProjectDetailPage() {
               <p>3. Dentro de cada modulo, use `Upload de doc` para anexar casos de uso, regras de negocio e fluxos.</p>
             </div>
             <div className="rounded-2xl border border-border bg-white/[0.02] p-4 text-sm text-muted">{docMessage}</div>
+          </Card>
+
+          <Card className="space-y-4 border-red-500/30 bg-red-500/[0.04]">
+            <div>
+              <p className="text-sm text-red-200/80">Zona critica</p>
+              <h2 className="font-display text-xl font-bold text-foreground">Excluir projeto</h2>
+              <p className="mt-2 text-sm text-muted">
+                Remove tambem os portais, modulos, documentos funcionais, chamados/retestes, bugs, historicos, demandas e planos de teste ligados a este projeto.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-red-500/20 bg-black/20 p-4 text-sm text-muted">{deleteMessage}</div>
+            <Button
+              type="button"
+              variant="secondary"
+              className="border-red-500/40 text-red-100 hover:border-red-400/70 hover:bg-red-500/10"
+              onClick={() => void handleDeleteProject()}
+              disabled={isDeletingProject}
+            >
+              {isDeletingProject ? 'Excluindo projeto...' : 'Excluir projeto'}
+            </Button>
           </Card>
 
           <Card className="space-y-4">

@@ -15,6 +15,19 @@ export interface CatalogProjectPortal extends CatalogOption {
   projetoId: string
 }
 
+export interface DeleteProjectSummary {
+  deletedProjectId: string
+  deletedProjectName: string
+  deletedPortals: number
+  deletedModules: number
+  deletedDocuments: number
+  deletedTickets: number
+  deletedBugs: number
+  deletedHistoricalTests: number
+  deletedTestPlans: number
+  deletedDemandas: number
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url)
 
@@ -95,4 +108,17 @@ export async function createCatalogProjectPortal(payload: { projetoId: string; n
   }
 
   return response.json() as Promise<CatalogProjectPortal>
+}
+
+export async function deleteCatalogProject(projectId: string) {
+  const response = await fetch(`/api/projetos/${projectId}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null)
+    throw new Error(errorBody?.message || 'Nao foi possivel excluir o projeto.')
+  }
+
+  return response.json() as Promise<DeleteProjectSummary>
 }

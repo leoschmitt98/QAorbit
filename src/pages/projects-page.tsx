@@ -1,16 +1,23 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { LoadingState } from '@/components/shared/loading-state'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
 import { useProjectScope } from '@/hooks/use-project-scope'
-import { useCatalogProjectsQuery } from '@/services/catalog-api'
+import { deleteCatalogProject, useCatalogProjectsQuery } from '@/services/catalog-api'
 
 export function ProjectsPage() {
+  const location = useLocation()
+  const queryClient = useQueryClient()
   const { selectedProjectId, setSelectedProjectId } = useProjectScope()
   const [search, setSearch] = useState('')
+  const [projectMessage, setProjectMessage] = useState(
+    String(location.state?.projectDeleteMessage || 'A exclusao de projeto remove portais, modulos e registros vinculados.'),
+  )
+  const [deletingProjectId, setDeletingProjectId] = useState('')
   const projectsQuery = useCatalogProjectsQuery()
 
   const filteredProjects = useMemo(
@@ -22,6 +29,43 @@ export function ProjectsPage() {
   )
 
   if (projectsQuery.isLoading) return <LoadingState />
+
+  async function handleDeleteProject(project: { id: string; nome: string }) {
+    const confirmation = window.prompt(
+      `Para excluir "${project.nome}" e todos os dados vinculados, digite exatamente o nome do projeto.`,
+    )
+
+    if (confirmation === null) return
+
+    if (confirmation.trim() !== project.nome) {
+      setProjectMessage('Nome digitado diferente do projeto. Nada foi excluido.')
+      return
+    }
+
+    setDeletingProjectId(project.id)
+    try {
+      const summary = await deleteCatalogProject(project.id)
+      if (selectedProjectId === project.id) {
+        setSelectedProjectId('')
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['catalog-projects'] })
+      await queryClient.invalidateQueries({ queryKey: ['catalog-project-portals', project.id] })
+      await queryClient.invalidateQueries({ queryKey: ['catalog-modules', project.id] })
+      await queryClient.invalidateQueries({ queryKey: ['functional-documents'] })
+      await queryClient.invalidateQueries({ queryKey: ['historical-tests'] })
+      await queryClient.invalidateQueries({ queryKey: ['test-plans'] })
+      await queryClient.invalidateQueries({ queryKey: ['demandas'] })
+
+      setProjectMessage(
+        `Projeto ${summary.deletedProjectName} excluido com ${summary.deletedPortals} portal(is), ${summary.deletedModules} modulo(s), ${summary.deletedHistoricalTests} historico(s) e ${summary.deletedTestPlans} test plan(s).`,
+      )
+    } catch (error) {
+      setProjectMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir o projeto.')
+    } finally {
+      setDeletingProjectId('')
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -53,6 +97,12 @@ export function ProjectsPage() {
           ))}
         </div>
       </Card>
+
+      {projectMessage ? (
+        <div className="rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
+          {projectMessage}
+        </div>
+      ) : null}
 
       <section className="grid gap-5 xl:grid-cols-3">
         {filteredProjects.length > 0 ? (
@@ -90,6 +140,15 @@ export function ProjectsPage() {
                 >
                   Abrir workspace
                 </Link>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-red-200 hover:bg-red-500/10 hover:text-red-100"
+                  onClick={() => void handleDeleteProject(project)}
+                  disabled={deletingProjectId === project.id}
+                >
+                  {deletingProjectId === project.id ? 'Excluindo...' : 'Excluir'}
+                </Button>
               </div>
             </Card>
           ))
