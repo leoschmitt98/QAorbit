@@ -117,7 +117,8 @@ export async function deleteCatalogProject(projectId: string) {
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => null)
-    throw new Error(errorBody?.message || 'Nao foi possivel excluir o projeto.')
+    const detail = errorBody?.detail ? ` Detalhe: ${errorBody.detail}` : ''
+    throw new Error(`${errorBody?.message || 'Nao foi possivel excluir o projeto.'}${detail}`)
   }
 
   return response.json() as Promise<DeleteProjectSummary>
