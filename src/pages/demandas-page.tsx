@@ -85,7 +85,7 @@ export function DemandasPage() {
       <SectionHeader
         eyebrow="Demandas"
         title="Demandas evolutivas e frentes de validacao"
-        description="Organize cards de produto separados dos chamados, com visao geral da demanda e tarefas internas por portal, modulo ou frente."
+        description="Organize cards de produto separados dos chamados, com visao geral da demanda e tarefas internas por local de teste, modulo ou frente."
       />
 
       <section className="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">

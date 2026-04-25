@@ -189,9 +189,9 @@ export interface AnalysisRecord {
   aiResponse: string
 }
 
-export type ProductType = 'Portal' | 'Sistema interno' | 'API'
+export type ProductType = 'Aplicacao web' | 'Sistema interno' | 'API' | string
 export type TicketOrigin = 'Suporte' | 'Cliente' | 'Interno'
-export type PortalArea = 'Aluno' | 'Professor' | 'Secretaria'
+export type PortalArea = string
 export type RetestStatus = 'Aprovado' | 'Reprovado' | 'Parcial' | 'Bloqueado'
 export type ReuseCriticality = 'Baixa' | 'Media' | 'Alta'
 export type StepValidationStatus = 'OK' | 'NOK' | 'Parcial'

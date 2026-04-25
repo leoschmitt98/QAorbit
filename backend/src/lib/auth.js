@@ -175,6 +175,7 @@ export async function listUsers() {
   const result = await createRequest(pool).query(`
     SELECT UserId, Nome, Email, RoleName, Ativo, CreatedAt, UpdatedAt
     FROM dbo.UsuariosQaOrbit
+    WHERE Ativo = 1
     ORDER BY Nome
   `)
 
@@ -238,6 +239,71 @@ export async function createUserAccount(payload) {
     name,
     email,
     role,
+  }
+}
+
+export async function deleteUserAccount(userId, currentUser) {
+  const pool = await getPool()
+  if (!pool) throw new Error('Gestao de usuarios requer banco configurado.')
+
+  const normalizedUserId = String(userId || '').trim()
+  if (!normalizedUserId) {
+    throw new Error('Usuario invalido.')
+  }
+
+  if (normalizedUserId === currentUser?.userId) {
+    throw new Error('Voce nao pode excluir o proprio acesso logado.')
+  }
+
+  const lookupRequest = createRequest(pool)
+  lookupRequest.input('userId', sql.NVarChar(120), normalizedUserId)
+  const lookupResult = await lookupRequest.query(`
+    SELECT TOP 1 UserId, Nome, Email, RoleName, Ativo
+    FROM dbo.UsuariosQaOrbit
+    WHERE UserId = @userId
+  `)
+
+  const user = lookupResult.recordset[0]
+  if (!user) {
+    throw new Error('Usuario nao encontrado.')
+  }
+
+  if (!user.Ativo) {
+    return {
+      userId: user.UserId,
+      name: user.Nome,
+      email: user.Email,
+      active: false,
+    }
+  }
+
+  if (String(user.RoleName || '').toLowerCase() === 'admin') {
+    const adminCountResult = await createRequest(pool).query(`
+      SELECT COUNT(1) AS total
+      FROM dbo.UsuariosQaOrbit
+      WHERE Ativo = 1
+        AND LOWER(RoleName) = 'admin'
+    `)
+
+    if (Number(adminCountResult.recordset[0]?.total || 0) <= 1) {
+      throw new Error('Nao e possivel excluir o ultimo administrador ativo.')
+    }
+  }
+
+  const updateRequest = createRequest(pool)
+  updateRequest.input('userId', sql.NVarChar(120), normalizedUserId)
+  await updateRequest.query(`
+    UPDATE dbo.UsuariosQaOrbit
+    SET Ativo = 0,
+        UpdatedAt = SYSDATETIME()
+    WHERE UserId = @userId
+  `)
+
+  return {
+    userId: user.UserId,
+    name: user.Nome,
+    email: user.Email,
+    active: false,
   }
 }
 

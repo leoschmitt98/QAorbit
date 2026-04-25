@@ -20,7 +20,7 @@ interface TicketContextFormProps {
   onChange: (value: TicketContext) => void
 }
 
-const productTypes: ProductType[] = ['Portal', 'Sistema interno', 'API']
+const productTypes: ProductType[] = ['Aplicacao web', 'Sistema interno', 'API']
 const origins: TicketOrigin[] = ['Suporte', 'Cliente', 'Interno']
 
 function normalizeScopeLabel(value: string) {
@@ -31,14 +31,14 @@ function normalizeScopeLabel(value: string) {
     .trim()
 }
 
-function moduleMatchesPortalArea(module: CatalogModulo, portalArea: string) {
-  const area = normalizeScopeLabel(portalArea)
+function moduleMatchesTestLocation(module: CatalogModulo, testLocation: string) {
+  const area = normalizeScopeLabel(testLocation)
   if (!area) return true
 
-  const portalName = normalizeScopeLabel(module.portalNome || '')
-  if (!portalName) return true
+  const locationName = normalizeScopeLabel(module.portalNome || '')
+  if (!locationName) return true
 
-  return portalName.includes(area)
+  return locationName.includes(area)
 }
 
 export function TicketContextForm({
@@ -58,7 +58,7 @@ export function TicketContextForm({
 }: TicketContextFormProps) {
   const [clipboardText, setClipboardText] = useState('')
   const availableModules = modules.filter(
-    (item) => item.projetoId === value.projectId && moduleMatchesPortalArea(item, value.portalArea),
+    (item) => item.projetoId === value.projectId && moduleMatchesTestLocation(item, value.portalArea),
   )
 
   function update<K extends keyof TicketContext>(key: K, nextValue: TicketContext[K]) {
@@ -163,7 +163,7 @@ export function TicketContextForm({
             options={productTypes.map((item) => ({ value: item, label: item }))}
           />
           <SelectField
-            label="Portal / Area"
+            label="Local de teste"
             value={value.portalArea}
             onChange={(nextValue) => update('portalArea', nextValue as PortalArea)}
             options={areas.map((item) => ({ value: item.nome, label: item.nome }))}

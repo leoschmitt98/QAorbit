@@ -104,7 +104,7 @@ export async function createCatalogProjectPortal(payload: { projetoId: string; n
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => null)
-    throw new Error(errorBody?.message || 'Nao foi possivel cadastrar o portal do projeto.')
+    throw new Error(errorBody?.message || 'Nao foi possivel cadastrar o local de teste do projeto.')
   }
 
   return response.json() as Promise<CatalogProjectPortal>

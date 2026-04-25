@@ -15,7 +15,7 @@ export function ProjectsPage() {
   const { selectedProjectId, setSelectedProjectId } = useProjectScope()
   const [search, setSearch] = useState('')
   const [projectMessage, setProjectMessage] = useState(
-    String(location.state?.projectDeleteMessage || 'A exclusao de projeto remove portais, modulos e registros vinculados.'),
+    String(location.state?.projectDeleteMessage || 'A exclusao de projeto remove locais de teste, modulos e registros vinculados.'),
   )
   const [deletingProjectId, setDeletingProjectId] = useState('')
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; nome: string } | null>(null)
@@ -48,7 +48,7 @@ export function ProjectsPage() {
       await queryClient.invalidateQueries({ queryKey: ['demandas'] })
 
       setProjectMessage(
-        `Projeto ${summary.deletedProjectName} excluido com ${summary.deletedPortals} portal(is), ${summary.deletedModules} modulo(s), ${summary.deletedHistoricalTests} historico(s) e ${summary.deletedTestPlans} test plan(s).`,
+        `Projeto ${summary.deletedProjectName} excluido com ${summary.deletedPortals} local(is) de teste, ${summary.deletedModules} modulo(s), ${summary.deletedHistoricalTests} historico(s) e ${summary.deletedTestPlans} test plan(s).`,
       )
     } catch (error) {
       setProjectMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir o projeto.')

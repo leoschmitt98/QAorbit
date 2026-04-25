@@ -65,7 +65,7 @@ export function HistoricalTestRecorder({
 
       <div className="grid gap-4 xl:grid-cols-2">
         <InfoField label="Modulo principal" value={selectedMainModule} />
-        <InfoField label="Portal / Area" value={portalArea || '-'} />
+        <InfoField label="Local de teste" value={portalArea || '-'} />
         <label className="space-y-2 xl:col-span-2">
           <span className="text-sm font-semibold text-foreground">Fluxo / cenario testado</span>
           <input

@@ -33,3 +33,11 @@ export async function createAdminUser(payload: { name: string; email: string; pa
 
   return parseJson<{ name: string; email: string; role: string }>(response)
 }
+
+export async function deleteAdminUser(userId: string) {
+  const response = await fetch(`/api/auth/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  })
+
+  return parseJson<{ userId: string; name: string; email: string; active: boolean }>(response)
+}

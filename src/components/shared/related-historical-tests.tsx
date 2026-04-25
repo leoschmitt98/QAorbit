@@ -17,13 +17,13 @@ export function RelatedHistoricalTests({ records, isLoading, enabled }: RelatedH
         <p className="text-sm text-muted">Regressao e impacto</p>
         <h3 className="font-display text-xl font-bold text-foreground">Testes historicos parecidos</h3>
         <p className="mt-2 text-sm text-muted">
-          Sugestoes automaticas com base no modulo, portal, cenario e problema atual para ajudar a antecipar impacto antes da correcao seguir para a master.
+          Sugestoes automaticas com base no modulo, local de teste, cenario e problema atual para ajudar a antecipar impacto antes da correcao seguir para a master.
         </p>
       </div>
 
       {!enabled ? (
         <div className="rounded-2xl border border-border bg-white/[0.02] p-4 text-sm text-muted">
-          Preencha projeto, modulo principal, portal/area e um resumo do cenario ou problema para buscar historicos relacionados.
+          Preencha projeto, modulo principal, local de teste e um resumo do cenario ou problema para buscar historicos relacionados.
         </div>
       ) : isLoading ? (
         <div className="rounded-2xl border border-border bg-white/[0.02] p-4 text-sm text-muted">

@@ -127,7 +127,7 @@ export function TestPlansPage() {
                   <div key={area.id} className="space-y-4 rounded-2xl border border-border bg-white/[0.02] p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted">Area / Portal</p>
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted">Local de teste</p>
                         <p className="font-semibold text-foreground">{area.nome}</p>
                       </div>
                       <span className="rounded-full border border-accent/20 bg-accent/8 px-3 py-1 text-xs font-semibold text-foreground">

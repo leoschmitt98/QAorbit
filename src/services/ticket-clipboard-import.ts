@@ -144,14 +144,11 @@ function extractAzureTitle(text: string) {
   return ''
 }
 
-function inferPortalArea(text: string, areas: CatalogOption[]) {
+function inferTestLocation(text: string, areas: CatalogOption[]) {
   const normalizedText = normalize(text)
   const directArea = areas.find((area) => normalizedText.includes(normalize(area.nome)))?.nome
 
   if (directArea) return directArea
-  if (normalizedText.includes('professor')) return 'Professor'
-  if (normalizedText.includes('aluno')) return 'Aluno'
-  if (normalizedText.includes('secretaria')) return 'Secretaria'
   return ''
 }
 
@@ -179,9 +176,8 @@ export async function importTicketClipboardContent(params: {
     'produto',
     'modulo',
     'modulo principal',
-    'portal',
+    'local de teste',
     'area',
-    'portal / area',
     'ambiente',
     'versao',
     'hotfix',
@@ -228,9 +224,9 @@ export async function importTicketClipboardContent(params: {
     ) ||
     findOptionIdByText(rawText, params.projects)
   const portalArea =
-    extractSingleLineValue(rawText, ['portal / area', 'portal', 'area']) ||
-    extractLabeledValueFromLines(rawText, ['portal / area', 'portal', 'area']) ||
-    inferPortalArea(rawText, params.areas) ||
+    extractSingleLineValue(rawText, ['local de teste', 'area']) ||
+    extractLabeledValueFromLines(rawText, ['local de teste', 'area']) ||
+    inferTestLocation(rawText, params.areas) ||
     ''
   const moduleId =
     findModuleIdByText(
@@ -294,7 +290,7 @@ export async function importTicketClipboardContent(params: {
     ticketId ? 'ID do chamado' : '',
     title ? 'Titulo' : '',
     projectId ? 'Projeto' : '',
-    portalArea ? 'Portal / Area' : '',
+    portalArea ? 'Local de teste' : '',
     moduleId ? 'Modulo principal' : '',
     customerProblemDescription ? 'Descricao do problema' : '',
     expectedBehavior ? 'Comportamento esperado' : '',

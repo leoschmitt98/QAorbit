@@ -141,11 +141,11 @@ function createEmptyStep(order: number): AutomationBlueprintStep {
 
 const exampleBlueprint: AutomationBlueprint = {
   flowName: 'Fluxo manual com DevTools',
-  system: 'Portal Secretaria',
-  module: 'Configuracao de Modelos de Avaliacao',
+  system: 'Aplicacao web',
+  module: 'Agendamento',
   objective: 'Montar um documento tecnico passo a passo para outra IA devolver o Cypress pronto.',
   preconditions: 'Usuario autenticado e tela correta aberta.',
-  testData: 'Base gvdasa_hml | Unidade Escola 1',
+  testData: 'Base homologacao | Usuario de teste',
   expectedResult: 'Fluxo documentado com seletores manuais confiaveis.',
   steps: [
     createHydratedStep({
@@ -390,7 +390,7 @@ export function AutomationBlueprintPage() {
             <Field label="Nome do fluxo">
               <Input value={blueprint.flowName} onChange={(event) => updateBlueprint('flowName', event.target.value)} />
             </Field>
-            <Field label="Sistema / portal">
+            <Field label="Sistema / local de teste">
               <Input value={blueprint.system} onChange={(event) => updateBlueprint('system', event.target.value)} />
             </Field>
             <Field label="Modulo">

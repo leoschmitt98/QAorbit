@@ -100,7 +100,7 @@ export function BugDetailPage() {
       ['Titulo do chamado', workflow.ticket.title],
       ['Projeto', workflow.ticket.projectId],
       ['Modulo principal', workflow.ticket.moduleId],
-      ['Portal / Area', workflow.ticket.portalArea],
+      ['Local de teste', workflow.ticket.portalArea],
       ['Ambiente', workflow.ticket.environment],
       ['Versao / Hotfix', workflow.ticket.version],
       ['Origem', workflow.ticket.origin],

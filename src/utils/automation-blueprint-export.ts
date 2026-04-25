@@ -72,7 +72,7 @@ export function downloadBlueprintMarkdown(blueprint: AutomationBlueprint) {
   const content = [
     `# ${blueprint.flowName || 'Blueprint de automação'}`,
     '',
-    `- Sistema/Portal: ${blueprint.system || '-'}`,
+    `- Sistema/local de teste: ${blueprint.system || '-'}`,
     `- Módulo: ${blueprint.module || '-'}`,
     `- Objetivo: ${blueprint.objective || '-'}`,
     `- Pré-condições: ${blueprint.preconditions || '-'}`,
@@ -100,7 +100,7 @@ export async function downloadBlueprintDocx(blueprint: AutomationBlueprint) {
       heading: HeadingLevel.TITLE,
       children: [new TextRun({ text: blueprint.flowName || 'Blueprint de automação', bold: true })],
     }),
-    new Paragraph({ text: `Sistema/Portal: ${blueprint.system || '-'}` }),
+    new Paragraph({ text: `Sistema/local de teste: ${blueprint.system || '-'}` }),
     new Paragraph({ text: `Módulo: ${blueprint.module || '-'}` }),
     new Paragraph({ text: `Objetivo: ${blueprint.objective || '-'}` }),
     new Paragraph({ text: `Pré-condições: ${blueprint.preconditions || '-'}` }),

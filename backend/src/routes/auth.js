@@ -1,5 +1,13 @@
 import { Router } from 'express'
-import { attachSession, authenticateUser, clearSession, createUserAccount, currentSession, listUsers } from '../lib/auth.js'
+import {
+  attachSession,
+  authenticateUser,
+  clearSession,
+  createUserAccount,
+  currentSession,
+  deleteUserAccount,
+  listUsers,
+} from '../lib/auth.js'
 
 const router = Router()
 
@@ -63,6 +71,22 @@ router.post('/users', async (req, res) => {
   } catch (error) {
     return res.status(400).json({
       message: error instanceof Error ? error.message : 'Nao foi possivel criar o usuario.',
+    })
+  }
+})
+
+router.delete('/users/:userId', async (req, res) => {
+  const session = currentSession(req)
+  if (!session || !session.canViewAll) {
+    return res.status(403).json({ message: 'Acesso restrito a administradores.' })
+  }
+
+  try {
+    const result = await deleteUserAccount(req.params.userId, session)
+    return res.json(result)
+  } catch (error) {
+    return res.status(400).json({
+      message: error instanceof Error ? error.message : 'Nao foi possivel excluir o usuario.',
     })
   }
 })

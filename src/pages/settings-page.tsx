@@ -2,7 +2,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/use-auth'
-import { createAdminUser, listAdminUsers, type AdminUserRecord } from '@/services/user-admin-api'
+import { createAdminUser, deleteAdminUser, listAdminUsers, type AdminUserRecord } from '@/services/user-admin-api'
 import { SectionHeader } from '@/components/ui/section-header'
 import { useEffect, useState } from 'react'
 
@@ -16,6 +16,8 @@ export function SettingsPage() {
   const [message, setMessage] = useState('Crie acessos individuais para o time sem depender de script manual no banco.')
   const [isLoadingUsers, setIsLoadingUsers] = useState(false)
   const [isCreatingUser, setIsCreatingUser] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<AdminUserRecord | null>(null)
+  const [deletingUserId, setDeletingUserId] = useState('')
 
   async function loadUsers() {
     if (!user?.canViewAll) return
@@ -48,6 +50,21 @@ export function SettingsPage() {
       setMessage(error instanceof Error ? error.message : 'Nao foi possivel criar o usuario.')
     } finally {
       setIsCreatingUser(false)
+    }
+  }
+
+  async function handleDeleteUser(item: AdminUserRecord) {
+    setDeletingUserId(item.userId)
+    try {
+      await deleteAdminUser(item.userId)
+      setMessage(`Acesso de ${item.email} excluido com sucesso.`)
+      setUsers((current) => current.filter((userItem) => userItem.userId !== item.userId))
+      setUserToDelete(null)
+      await loadUsers()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir o usuario.')
+    } finally {
+      setDeletingUserId('')
     }
   }
 
@@ -130,9 +147,24 @@ export function SettingsPage() {
                         <p className="font-semibold text-foreground">{item.name}</p>
                         <p className="text-sm text-muted">{item.email}</p>
                       </div>
-                      <div className="text-right text-xs uppercase tracking-[0.16em] text-muted">
-                        <p>{item.role}</p>
-                        <p>{item.active ? 'ativo' : 'inativo'}</p>
+                      <div className="flex flex-wrap items-center justify-end gap-3">
+                        <div className="text-right text-xs uppercase tracking-[0.16em] text-muted">
+                          <p>{item.role}</p>
+                          <p>{item.active ? 'ativo' : 'inativo'}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="text-red-200 hover:bg-red-500/10 hover:text-red-100"
+                          onClick={() => setUserToDelete(item)}
+                          disabled={!item.active || deletingUserId === item.userId || item.userId === user?.userId}
+                        >
+                          {item.userId === user?.userId
+                            ? 'Seu acesso'
+                            : deletingUserId === item.userId
+                              ? 'Excluindo...'
+                              : 'Excluir'}
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -145,6 +177,25 @@ export function SettingsPage() {
             </div>
           </Card>
         </section>
+      ) : null}
+
+      {userToDelete ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-[#11131a] p-5 shadow-2xl">
+            <h2 className="font-display text-xl font-bold text-foreground">Excluir acesso?</h2>
+            <p className="mt-3 text-sm text-muted">
+              O perfil de acesso de {userToDelete.name} sera excluido. Esse usuario nao conseguira mais entrar no QA Orbit.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <Button type="button" variant="ghost" onClick={() => setUserToDelete(null)}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => void handleDeleteUser(userToDelete)} disabled={deletingUserId === userToDelete.userId}>
+                {deletingUserId === userToDelete.userId ? 'Excluindo...' : 'OK'}
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   )

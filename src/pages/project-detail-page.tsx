@@ -48,12 +48,12 @@ export function ProjectDetailPage() {
   const documentsQuery = useFunctionalDocumentsQuery({ projectId })
 
   const [newPortalName, setNewPortalName] = useState('')
-  const [portalMessage, setPortalMessage] = useState('Crie os portais ou areas macro do projeto antes de distribuir os modulos dentro deles.')
+  const [portalMessage, setPortalMessage] = useState('Crie os locais de teste do projeto antes de distribuir os modulos dentro deles.')
   const [isCreatingPortal, setIsCreatingPortal] = useState(false)
 
   const [newModuleName, setNewModuleName] = useState('')
   const [newModulePortalId, setNewModulePortalId] = useState('')
-  const [moduleMessage, setModuleMessage] = useState('Cadastre os modulos reais dentro do portal correspondente para espelhar o repositorio funcional do projeto.')
+  const [moduleMessage, setModuleMessage] = useState('Cadastre os modulos reais dentro do local de teste correspondente para espelhar o fluxo funcional do projeto.')
   const [isCreatingModule, setIsCreatingModule] = useState(false)
   const [collapsedPortalIds, setCollapsedPortalIds] = useState<string[]>([])
   const [inlineUploadModuleId, setInlineUploadModuleId] = useState('')
@@ -68,7 +68,7 @@ export function ProjectDetailPage() {
   const [docMessage, setDocMessage] = useState('Vincule PDFs, DOCX ou planilhas ao modulo certo para a IA usar a base funcional do projeto.')
   const [isUploadingDoc, setIsUploadingDoc] = useState(false)
   const [deleteMessage, setDeleteMessage] = useState(
-    'Esta acao remove o projeto, portais, modulos, documentos, chamados, bugs, historicos e test plans vinculados.',
+    'Esta acao remove o projeto, locais de teste, modulos, documentos, chamados, bugs, historicos e test plans vinculados.',
   )
   const [isDeletingProject, setIsDeletingProject] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -98,7 +98,7 @@ export function ProjectDetailPage() {
       })),
       {
         id: 'sem-portal',
-        nome: 'Sem portal definido',
+        nome: 'Sem local definido',
         modules: modulesWithStats.filter((module) => !module.portalId),
       },
     ].filter((group) => group.modules.length > 0 || group.id !== 'sem-portal')
@@ -124,7 +124,7 @@ export function ProjectDetailPage() {
 
   async function handleCreatePortal() {
     if (!newPortalName.trim()) {
-      setPortalMessage('Informe o nome do portal/area antes de cadastrar.')
+      setPortalMessage('Informe o nome do local de teste antes de cadastrar.')
       return
     }
 
@@ -133,11 +133,11 @@ export function ProjectDetailPage() {
       const created = await createCatalogProjectPortal({ projetoId: projectId, nome: newPortalName.trim() })
       setNewPortalName('')
       setNewModulePortalId(created.id)
-      setPortalMessage(`Escopo ${created.nome} criado com sucesso dentro de ${projectName}.`)
+      setPortalMessage(`Local de teste ${created.nome} criado com sucesso dentro de ${projectName}.`)
       await queryClient.invalidateQueries({ queryKey: ['catalog-project-portals', projectId] })
       await queryClient.invalidateQueries({ queryKey: ['catalog-modules', projectId] })
     } catch (error) {
-      setPortalMessage(error instanceof Error ? error.message : 'Nao foi possivel cadastrar o portal do projeto.')
+      setPortalMessage(error instanceof Error ? error.message : 'Nao foi possivel cadastrar o local de teste do projeto.')
     } finally {
       setIsCreatingPortal(false)
     }
@@ -235,7 +235,7 @@ export function ProjectDetailPage() {
       navigate('/projects', {
         replace: true,
         state: {
-          projectDeleteMessage: `Projeto ${summary.deletedProjectName} excluido com ${summary.deletedPortals} portal(is), ${summary.deletedModules} modulo(s), ${summary.deletedHistoricalTests} historico(s) e ${summary.deletedTestPlans} test plan(s).`,
+          projectDeleteMessage: `Projeto ${summary.deletedProjectName} excluido com ${summary.deletedPortals} local(is) de teste, ${summary.deletedModules} modulo(s), ${summary.deletedHistoricalTests} historico(s) e ${summary.deletedTestPlans} test plan(s).`,
         },
       })
     } catch (error) {
@@ -262,7 +262,7 @@ export function ProjectDetailPage() {
       <SectionHeader
         eyebrow="Workspace do projeto"
         title={project.nome}
-        description="Monte um escopo funcional parecido com repositorio: portais do projeto, modulos dentro de cada portal e documentos vinculados ao lugar certo."
+        description="Monte um escopo funcional parecido com repositorio: locais de teste do projeto, modulos dentro de cada local e documentos vinculados ao lugar certo."
       />
 
       <section className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
@@ -271,7 +271,7 @@ export function ProjectDetailPage() {
             <p className="text-sm text-muted">Estrutura do projeto</p>
             <h2 className="font-display text-xl font-bold text-foreground">Explorer funcional</h2>
             <p className="mt-2 text-sm text-muted">
-              Organize o projeto em um formato proximo de IDE: primeiro o portal, depois os modulos e, por fim, a documentacao funcional ligada a cada modulo.
+              Organize o projeto em um formato proximo de IDE: primeiro o local de teste, depois os modulos e, por fim, a documentacao funcional ligada a cada modulo.
             </p>
           </div>
 
@@ -279,10 +279,10 @@ export function ProjectDetailPage() {
             <Input
               value={newPortalName}
               onChange={(event) => setNewPortalName(event.target.value)}
-              placeholder="Ex.: Portal do aluno, Portal do professor, Portal da secretaria"
+              placeholder="Ex.: App web, Checkout, API publica, Painel admin"
             />
             <Button onClick={() => void handleCreatePortal()} disabled={isCreatingPortal}>
-              {isCreatingPortal ? 'Criando...' : 'Criar portal'}
+              {isCreatingPortal ? 'Criando...' : 'Criar local de teste'}
             </Button>
           </div>
 
@@ -290,13 +290,13 @@ export function ProjectDetailPage() {
 
           <div className="grid gap-4 md:grid-cols-[0.9fr,1.1fr,auto]">
             <label className="space-y-2">
-              <span className="text-sm font-semibold text-foreground">Portal/escopo</span>
+              <span className="text-sm font-semibold text-foreground">Local de teste</span>
               <select
                 value={newModulePortalId}
                 onChange={(event) => setNewModulePortalId(event.target.value)}
                 className="h-12 w-full rounded-2xl border border-border bg-black/20 px-4 text-sm text-foreground outline-none focus:border-accent/40"
               >
-                <option value="">Sem portal definido</option>
+                <option value="">Sem local definido</option>
                 {portals.map((portal) => (
                   <option key={portal.id} value={portal.id}>
                     {portal.nome}
@@ -308,7 +308,7 @@ export function ProjectDetailPage() {
             <Input
               value={newModuleName}
               onChange={(event) => setNewModuleName(event.target.value)}
-              placeholder="Ex.: Digitacao de notas, Configurar modelos, Diario de classe"
+              placeholder="Ex.: Agendamento, Servicos, Horarios, Data, Confirmacao"
             />
 
             <Button onClick={() => void handleCreateModule()} disabled={isCreatingModule}>
@@ -324,7 +324,7 @@ export function ProjectDetailPage() {
                 <div key={group.id} className="rounded-3xl border border-border bg-black/20 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted">Portal</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted">Local de teste</p>
                       <p className="font-semibold text-foreground">{group.nome}</p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -485,7 +485,7 @@ export function ProjectDetailPage() {
               ))
             ) : (
               <div className="rounded-2xl border border-border bg-white/[0.02] p-4 text-sm text-muted">
-                Nenhum portal ou modulo cadastrado ainda para este projeto.
+                Nenhum local de teste ou modulo cadastrado ainda para este projeto.
               </div>
             )}
           </div>
@@ -498,8 +498,8 @@ export function ProjectDetailPage() {
               <h2 className="font-display text-xl font-bold text-foreground">Como usar este mapa</h2>
             </div>
             <div className="space-y-3 text-sm text-muted">
-              <p>1. Crie os portais principais do projeto, como Aluno, Professor ou Secretaria.</p>
-              <p>2. Cadastre os modulos dentro de cada portal para espelhar a estrutura funcional do sistema.</p>
+              <p>1. Crie os locais de teste principais do projeto, como App web, Checkout ou Painel admin.</p>
+              <p>2. Cadastre os modulos dentro de cada local de teste para espelhar a estrutura funcional do sistema.</p>
               <p>3. Dentro de cada modulo, use `Upload de doc` para anexar casos de uso, regras de negocio e fluxos.</p>
             </div>
             <div className="rounded-2xl border border-border bg-white/[0.02] p-4 text-sm text-muted">{docMessage}</div>
@@ -510,7 +510,7 @@ export function ProjectDetailPage() {
               <p className="text-sm text-red-200/80">Zona critica</p>
               <h2 className="font-display text-xl font-bold text-foreground">Excluir projeto</h2>
               <p className="mt-2 text-sm text-muted">
-                Remove tambem os portais, modulos, documentos funcionais, chamados/retestes, bugs, historicos, demandas e planos de teste ligados a este projeto.
+                Remove tambem os locais de teste, modulos, documentos funcionais, chamados/retestes, bugs, historicos, demandas e planos de teste ligados a este projeto.
               </p>
             </div>
             <div className="rounded-2xl border border-red-500/20 bg-black/20 p-4 text-sm text-muted">{deleteMessage}</div>
@@ -564,7 +564,7 @@ export function ProjectDetailPage() {
               </div>
             ) : (
               <div className="rounded-2xl border border-border bg-white/[0.02] p-4 text-sm text-muted">
-                Nenhum documento neste projeto ainda. Assim que voce subir casos de uso e regras de negocio, eles aparecerao organizados por portal e modulo.
+                Nenhum documento neste projeto ainda. Assim que voce subir casos de uso e regras de negocio, eles aparecerao organizados por local de teste e modulo.
               </div>
             )}
           </Card>

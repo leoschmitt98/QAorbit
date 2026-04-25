@@ -103,7 +103,7 @@ export function HistoricalTestsPage() {
             </select>
           </label>
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-foreground">Portal / Area</span>
+            <span className="text-sm font-semibold text-foreground">Local de teste</span>
             <select
               value={portalArea}
               onChange={(event) => setPortalArea(event.target.value)}
@@ -157,7 +157,7 @@ export function HistoricalTestsPage() {
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-5">
-                  <InfoBlock label="Portal / Area" value={record.portalArea || '-'} />
+                  <InfoBlock label="Local de teste" value={record.portalArea || '-'} />
                   <InfoBlock label="Criticidade" value={record.criticidade} />
                   <InfoBlock label="Automacao" value={record.temAutomacao ? record.frameworkAutomacao || 'Sim' : 'Nao'} />
                   <InfoBlock label="Modulos impactados" value={String(record.modulosImpactados.length)} />

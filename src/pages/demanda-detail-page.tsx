@@ -384,14 +384,14 @@ export function DemandaDetailPage() {
 
         <div className="grid gap-4 xl:grid-cols-[1fr,1fr,220px,220px,180px,140px] xl:items-end">
           <Field label="Titulo">
-            <Input value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} placeholder="Ex.: Diario de classe" />
+            <Input value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} placeholder="Ex.: Agendamento" />
           </Field>
 
           <Field label="Descricao">
             <Input value={newTaskDescription} onChange={(event) => setNewTaskDescription(event.target.value)} placeholder="Escopo rapido da tarefa" />
           </Field>
 
-          <Field label="Portal">
+          <Field label="Local de teste">
             <select
               value={newTaskPortalId}
               onChange={(event) => {
@@ -594,7 +594,7 @@ function TaskTreeCard({
               <Input value={descricao} onChange={(event) => setDescricao(event.target.value)} placeholder="Escopo rapido" />
             </Field>
 
-            <Field label="Portal">
+            <Field label="Local de teste">
               <select
                 value={portalId}
                 onChange={(event) => {

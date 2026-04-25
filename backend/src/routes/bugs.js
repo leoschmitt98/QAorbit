@@ -429,7 +429,7 @@ function buildCalledContextBlock(snapshot) {
     ['Titulo do chamado', snapshot.ticketTitle || '-'],
     ['Projeto', snapshot.projectName || snapshot.projectId || '-'],
     ['Modulo', snapshot.moduleName || snapshot.moduleId || '-'],
-    ['Portal / Area', snapshot.portalArea || '-'],
+    ['Local de teste', snapshot.portalArea || '-'],
     ['Ambiente', snapshot.environment || '-'],
     ['Versao / Hotfix', snapshot.version || '-'],
     ['Origem', snapshot.origin || '-'],

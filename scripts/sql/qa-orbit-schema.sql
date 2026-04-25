@@ -693,12 +693,12 @@ BEGIN
 END
 GO
 
-IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'Aluno')
-  INSERT INTO dbo.Areas (Nome) VALUES ('Aluno');
-IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'Professor')
-  INSERT INTO dbo.Areas (Nome) VALUES ('Professor');
-IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'Secretaria')
-  INSERT INTO dbo.Areas (Nome) VALUES ('Secretaria');
-IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'Admin')
-  INSERT INTO dbo.Areas (Nome) VALUES ('Admin');
+IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'App web')
+  INSERT INTO dbo.Areas (Nome) VALUES ('App web');
+IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'Checkout')
+  INSERT INTO dbo.Areas (Nome) VALUES ('Checkout');
+IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'API publica')
+  INSERT INTO dbo.Areas (Nome) VALUES ('API publica');
+IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'Painel admin')
+  INSERT INTO dbo.Areas (Nome) VALUES ('Painel admin');
 GO
