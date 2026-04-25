@@ -18,6 +18,7 @@ export function ProjectsPage() {
     String(location.state?.projectDeleteMessage || 'A exclusao de projeto remove portais, modulos e registros vinculados.'),
   )
   const [deletingProjectId, setDeletingProjectId] = useState('')
+  const [projectToDelete, setProjectToDelete] = useState<{ id: string; nome: string } | null>(null)
   const projectsQuery = useCatalogProjectsQuery()
 
   const filteredProjects = useMemo(
@@ -31,17 +32,6 @@ export function ProjectsPage() {
   if (projectsQuery.isLoading) return <LoadingState />
 
   async function handleDeleteProject(project: { id: string; nome: string }) {
-    const confirmation = window.prompt(
-      `Para excluir "${project.nome}" e todos os dados vinculados, digite exatamente o nome do projeto.`,
-    )
-
-    if (confirmation === null) return
-
-    if (confirmation.trim() !== project.nome) {
-      setProjectMessage('Nome digitado diferente do projeto. Nada foi excluido.')
-      return
-    }
-
     setDeletingProjectId(project.id)
     try {
       const summary = await deleteCatalogProject(project.id)
@@ -64,6 +54,7 @@ export function ProjectsPage() {
       setProjectMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir o projeto.')
     } finally {
       setDeletingProjectId('')
+      setProjectToDelete(null)
     }
   }
 
@@ -144,7 +135,7 @@ export function ProjectsPage() {
                   type="button"
                   variant="ghost"
                   className="text-red-200 hover:bg-red-500/10 hover:text-red-100"
-                  onClick={() => void handleDeleteProject(project)}
+                  onClick={() => setProjectToDelete(project)}
                   disabled={deletingProjectId === project.id}
                 >
                   {deletingProjectId === project.id ? 'Excluindo...' : 'Excluir'}
@@ -159,6 +150,25 @@ export function ProjectsPage() {
           </Card>
         )}
       </section>
+
+      {projectToDelete ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-[#11131a] p-5 shadow-2xl">
+            <h2 className="font-display text-xl font-bold text-foreground">Excluir projeto?</h2>
+            <p className="mt-3 text-sm text-muted">
+              O projeto {projectToDelete.nome} sera excluido e todos os chamados vinculados a ele tambem serao removidos.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <Button type="button" variant="ghost" onClick={() => setProjectToDelete(null)}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => void handleDeleteProject(projectToDelete)}>
+                OK
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

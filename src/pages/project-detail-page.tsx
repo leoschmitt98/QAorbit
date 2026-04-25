@@ -71,6 +71,7 @@ export function ProjectDetailPage() {
     'Esta acao remove o projeto, portais, modulos, documentos, chamados, bugs, historicos e test plans vinculados.',
   )
   const [isDeletingProject, setIsDeletingProject] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   const project = (projectsQuery.data ?? []).find((item) => item.id === projectId) ?? null
   const projectName = project?.nome ?? ''
@@ -216,17 +217,6 @@ export function ProjectDetailPage() {
   }
 
   async function handleDeleteProject() {
-    const confirmation = window.prompt(
-      `Para excluir "${projectName}" e todos os dados vinculados, digite exatamente o nome do projeto.`,
-    )
-
-    if (confirmation === null) return
-
-    if (confirmation.trim() !== projectName) {
-      setDeleteMessage('Nome digitado diferente do projeto. Nada foi excluido.')
-      return
-    }
-
     setIsDeletingProject(true)
     try {
       const summary = await deleteCatalogProject(projectId)
@@ -252,6 +242,7 @@ export function ProjectDetailPage() {
       setDeleteMessage(error instanceof Error ? error.message : 'Nao foi possivel excluir o projeto.')
     } finally {
       setIsDeletingProject(false)
+      setIsDeleteDialogOpen(false)
     }
   }
 
@@ -527,7 +518,7 @@ export function ProjectDetailPage() {
               type="button"
               variant="secondary"
               className="border-red-500/40 text-red-100 hover:border-red-400/70 hover:bg-red-500/10"
-              onClick={() => void handleDeleteProject()}
+              onClick={() => setIsDeleteDialogOpen(true)}
               disabled={isDeletingProject}
             >
               {isDeletingProject ? 'Excluindo projeto...' : 'Excluir projeto'}
@@ -579,6 +570,25 @@ export function ProjectDetailPage() {
           </Card>
         </div>
       </section>
+
+      {isDeleteDialogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-[#11131a] p-5 shadow-2xl">
+            <h2 className="font-display text-xl font-bold text-foreground">Excluir projeto?</h2>
+            <p className="mt-3 text-sm text-muted">
+              O projeto {projectName} sera excluido e todos os chamados vinculados a ele tambem serao removidos.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <Button type="button" variant="ghost" onClick={() => setIsDeleteDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => void handleDeleteProject()} disabled={isDeletingProject}>
+                {isDeletingProject ? 'Excluindo...' : 'OK'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

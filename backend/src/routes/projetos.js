@@ -50,6 +50,12 @@ function buildProjectDeleteBatch(projectIdExpression, outputJson = false) {
     INSERT INTO @Portals (Id)
     SELECT Id FROM dbo.ProjetoPortais WHERE ProjetoId = @DeleteProjectId;
 
+    INSERT INTO @Modules (Id)
+    SELECT Id
+    FROM dbo.Modulos
+    WHERE PortalId IN (SELECT Id FROM @Portals)
+      AND Id NOT IN (SELECT Id FROM @Modules);
+
     DECLARE @Tickets TABLE (TicketId NVARCHAR(120) PRIMARY KEY);
     INSERT INTO @Tickets (TicketId)
     SELECT TicketId
@@ -484,10 +490,12 @@ router.delete('/:projectId', async (req, res) => {
     await transaction.begin()
 
     try {
-      const summary = await runProjectCascadeDelete(transaction, projectId)
+      const request = transaction.request()
+      request.input('projectId', sql.Int, projectId)
+      const result = await request.query(buildProjectDeleteBatch('@projectId'))
       await transaction.commit()
 
-      return res.json(summary)
+      return res.json(normalizeDeleteSummary(result.recordset[0]))
     } catch (error) {
       await transaction.rollback()
       throw error
