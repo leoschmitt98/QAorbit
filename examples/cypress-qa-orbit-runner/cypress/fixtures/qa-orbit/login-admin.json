@@ -1,0 +1,63 @@
+{
+  "id": "smart-session-1777167132412-8a3d2458",
+  "name": "login senha valida",
+  "project": {
+    "id": 1,
+    "name": "Sheila"
+  },
+  "startUrl": "https://meubarbeiro.sheilasystem.com.br/",
+  "environment": "prod",
+  "steps": [
+    {
+      "order": 1,
+      "action": "click",
+      "target": {
+        "strategy": "css",
+        "selector": "[data-cy='btn-admin']",
+        "text": null,
+        "recommendedCommand": "get",
+        "fallbackSelector": "div > a > button"
+      },
+      "value": null,
+      "variableName": null,
+      "expectedResult": "",
+      "selectorQuality": "strong",
+      "warning": "",
+      "improvementSuggestion": ""
+    },
+    {
+      "order": 2,
+      "action": "type",
+      "target": {
+        "strategy": "css",
+        "selector": "[data-cy='admin-password-input']",
+        "text": null,
+        "recommendedCommand": "get",
+        "fallbackSelector": "form > div > input[type=\"password\"]"
+      },
+      "value": "{{password}}",
+      "variableName": "password",
+      "expectedResult": "",
+      "selectorQuality": "strong",
+      "warning": "",
+      "improvementSuggestion": ""
+    },
+    {
+      "order": 3,
+      "action": "click",
+      "target": {
+        "strategy": "css",
+        "selector": "[data-cy='admin-login-submit']",
+        "text": null,
+        "recommendedCommand": "get",
+        "fallbackSelector": "div > form > button"
+      },
+      "value": null,
+      "variableName": null,
+      "expectedResult": "",
+      "selectorQuality": "strong",
+      "warning": "",
+      "improvementSuggestion": ""
+    }
+  ]
+}

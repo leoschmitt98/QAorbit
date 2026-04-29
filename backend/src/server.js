@@ -13,7 +13,9 @@ import historicoTestesRouter from './routes/historico-testes.js'
 import modulosRouter from './routes/modulos.js'
 import projetoPortaisRouter from './routes/projeto-portais.js'
 import projetosRouter from './routes/projetos.js'
+import qaRunnerRouter from './routes/qa-runner.js'
 import quadrosRouter from './routes/quadros.js'
+import smartRecorderRouter, { handleSmartRecorderCapture } from './routes/smart-recorder.js'
 import testPlansRouter from './routes/test-plans.js'
 import { closePool } from './db.js'
 import { ensureAuthSchemaAndBootstrap, requireAuth } from './lib/auth.js'
@@ -30,11 +32,15 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+app.options('/api/smart-recorder/capture/:id/steps', handleSmartRecorderCapture)
+app.post('/api/smart-recorder/capture/:id/steps', handleSmartRecorderCapture)
 app.use('/api/auth', authRouter)
 app.use('/storage', requireAuth, express.static(storageRoot))
 app.use('/api', requireAuth)
 
 app.use('/api/projetos', projetosRouter)
+app.use('/api/qa-runner', qaRunnerRouter)
+app.use('/api/smart-recorder', smartRecorderRouter)
 app.use('/api/projeto-portais', projetoPortaisRouter)
 app.use('/api/modulos', modulosRouter)
 app.use('/api/areas', areasRouter)

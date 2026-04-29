@@ -1,6 +1,7 @@
 import { Copy, ExternalLink } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { GlowButton } from '@/components/ui/glow-button'
+import { QA_ORBIT_INSTRUCTOR_GPT_URL } from '@/config/external-links'
 import type { PromptAnalysisMode } from '@/types/domain'
 import { cn } from '@/utils/cn'
 
@@ -63,7 +64,7 @@ export function PromptViewer({
               <Copy className="mr-2 h-4 w-4" />
               Copiar
             </GlowButton>
-            <GlowButton>
+            <GlowButton onClick={() => window.open(QA_ORBIT_INSTRUCTOR_GPT_URL, '_blank', 'noopener,noreferrer')}>
               <ExternalLink className="mr-2 h-4 w-4" />
               Abrir no GPT
             </GlowButton>

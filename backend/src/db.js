@@ -20,10 +20,10 @@ function getInstanceParts() {
 
 function baseConfig() {
   const { server, instanceName } = getInstanceParts()
+  const port = process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined
 
-  return {
+  const config = {
     server,
-    port: Number(process.env.DB_PORT || 1433),
     database: process.env.DB_DATABASE || 'QA Orbit',
     user: process.env.DB_USER || undefined,
     password: process.env.DB_PASSWORD || undefined,
@@ -38,6 +38,12 @@ function baseConfig() {
       idleTimeoutMillis: 30000,
     },
   }
+
+  if (port && !instanceName) {
+    config.port = port
+  }
+
+  return config
 }
 
 let poolPromise

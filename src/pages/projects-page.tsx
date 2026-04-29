@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
 import { useProjectScope } from '@/hooks/use-project-scope'
-import { deleteCatalogProject, useCatalogProjectsQuery } from '@/services/catalog-api'
+import { createCatalogProject, deleteCatalogProject, useCatalogProjectsQuery } from '@/services/catalog-api'
 
 export function ProjectsPage() {
   const location = useLocation()
@@ -19,6 +19,9 @@ export function ProjectsPage() {
   )
   const [deletingProjectId, setDeletingProjectId] = useState('')
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; nome: string } | null>(null)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [newProjectName, setNewProjectName] = useState('')
+  const [isCreatingProject, setIsCreatingProject] = useState(false)
   const projectsQuery = useCatalogProjectsQuery()
 
   const filteredProjects = useMemo(
@@ -58,13 +61,35 @@ export function ProjectsPage() {
     }
   }
 
+  async function handleCreateProject() {
+    const nome = newProjectName.trim()
+    if (!nome) {
+      setProjectMessage('Informe o nome do projeto.')
+      return
+    }
+
+    setIsCreatingProject(true)
+    try {
+      const created = await createCatalogProject({ nome })
+      await queryClient.invalidateQueries({ queryKey: ['catalog-projects'] })
+      setSelectedProjectId(created.id)
+      setProjectMessage(`Projeto ${created.nome} cadastrado com sucesso.`)
+      setNewProjectName('')
+      setIsCreateModalOpen(false)
+    } catch (error) {
+      setProjectMessage(error instanceof Error ? error.message : 'Nao foi possivel cadastrar o projeto.')
+    } finally {
+      setIsCreatingProject(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SectionHeader
         eyebrow="Gestao de projetos"
         title="Projetos e frentes monitoradas"
         description="Use esta aba para entrar no contexto de cada produto, separar o workspace por projeto e organizar modulos e documentacao funcional."
-        action={<Button disabled>Novo projeto</Button>}
+        action={<Button onClick={() => setIsCreateModalOpen(true)}>Novo projeto</Button>}
       />
 
       <Card className="grid gap-4 lg:grid-cols-[1fr,auto]">
@@ -164,6 +189,44 @@ export function ProjectsPage() {
               </Button>
               <Button type="button" onClick={() => void handleDeleteProject(projectToDelete)}>
                 OK
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isCreateModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-[#11131a] p-5 shadow-2xl">
+            <h2 className="font-display text-xl font-bold text-foreground">Novo projeto</h2>
+            <p className="mt-3 text-sm text-muted">
+              Cadastre um projeto para organizar locais de teste, modulos, chamados, documentos e automacoes.
+            </p>
+            <label className="mt-5 block space-y-2">
+              <span className="text-sm font-semibold text-foreground">Nome do projeto</span>
+              <Input
+                value={newProjectName}
+                onChange={(event) => setNewProjectName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void handleCreateProject()
+                }}
+                placeholder="Ex.: Plataforma QA"
+                autoFocus
+              />
+            </label>
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setIsCreateModalOpen(false)
+                  setNewProjectName('')
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => void handleCreateProject()} disabled={isCreatingProject}>
+                {isCreatingProject ? 'Cadastrando...' : 'Cadastrar'}
               </Button>
             </div>
           </div>

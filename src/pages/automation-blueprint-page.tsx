@@ -26,6 +26,35 @@ const actionOptions: Array<{ value: AutomationActionType; label: string }> = [
 
 const STORAGE_KEY = 'qa-orbit-automation-blueprint-draft'
 
+interface SmartRecorderBlueprintStep {
+  order?: number
+  action?: string
+  target?: {
+    strategy?: string
+    selector?: string
+    text?: string | null
+    recommendedCommand?: string
+    fallbackSelector?: string
+  }
+  value?: string | null
+  expectedResult?: string
+  selectorQuality?: string
+  warning?: string
+  improvementSuggestion?: string
+}
+
+interface SmartRecorderBlueprint {
+  id?: string
+  name?: string
+  project?: {
+    id?: number
+    name?: string
+  }
+  startUrl?: string
+  environment?: string
+  steps?: SmartRecorderBlueprintStep[]
+}
+
 function isHtmlSnippet(value: string) {
   return String(value || '').trim().startsWith('<')
 }
@@ -186,6 +215,88 @@ function hydrateBlueprint(blueprint: AutomationBlueprint): AutomationBlueprint {
   }
 }
 
+function isSmartRecorderBlueprint(value: unknown): value is SmartRecorderBlueprint {
+  const candidate = value as SmartRecorderBlueprint
+  return Boolean(candidate?.startUrl && Array.isArray(candidate.steps) && candidate.steps.some((step) => step?.target))
+}
+
+function mapSmartRecorderAction(action: string | undefined): AutomationActionType {
+  if (action === 'assertText' || action === 'assertVisible' || action === 'assertion') return 'validate'
+  if (action === 'type') return 'type'
+  if (action === 'select') return 'select'
+  if (action === 'check') return 'check'
+  if (action === 'uncheck') return 'uncheck'
+  if (action === 'submit') return 'submit'
+  return 'click'
+}
+
+function buildSmartRecorderSelector(step: SmartRecorderBlueprintStep) {
+  const target = step.target || {}
+  if (target.recommendedCommand === 'contains' && target.selector && target.text) {
+    const safeText = String(target.text).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    return `cy.contains('${target.selector}', '${safeText}')`
+  }
+
+  return target.selector || ''
+}
+
+function smartRecorderStepTitle(step: SmartRecorderBlueprintStep) {
+  const action = mapSmartRecorderAction(step.action)
+  const target = step.target || {}
+  const label = target.text || target.selector || `passo ${step.order || ''}`
+  const actionLabel = action === 'type' ? 'Preencher' : action === 'validate' ? 'Validar' : 'Executar'
+  return `${actionLabel} ${label}`.trim()
+}
+
+function smartRecorderToAutomationBlueprint(source: SmartRecorderBlueprint): AutomationBlueprint {
+  const steps = [...(source.steps || [])]
+    .sort((left, right) => Number(left.order || 0) - Number(right.order || 0))
+    .map((step, index) => {
+      const target = step.target || {}
+      const action = mapSmartRecorderAction(step.action)
+      const selector = buildSmartRecorderSelector(step)
+      const visibleText = target.text || ''
+      const notes = [
+        'Importado do Smart Recorder.',
+        step.selectorQuality ? `Qualidade do seletor: ${step.selectorQuality}.` : '',
+        step.warning || '',
+        step.improvementSuggestion ? `Sugestao: ${step.improvementSuggestion}.` : '',
+      ].filter(Boolean).join(' ')
+
+      return createHydratedStep({
+        id: `smart-recorder-step-${Date.now()}-${index + 1}`,
+        order: index + 1,
+        title: smartRecorderStepTitle(step),
+        screen: source.project?.name || '',
+        action,
+        actionLabel: smartRecorderStepTitle(step),
+        elementType: target.strategy === 'text' ? target.selector || 'element' : target.selector?.match(/^([a-z]+)/)?.[1] || 'element',
+        visibleText,
+        htmlReference: '',
+        elementId: '',
+        elementClasses: [],
+        elementName: '',
+        dataTestId: target.selector?.match(/\[data-testid=['"]([^'"]+)['"]]/)?.[1] || '',
+        manualSelector: selector,
+        manualAlternativeSelector: target.fallbackSelector || '',
+        typedValue: step.value || '',
+        expectedStepResult: step.expectedResult || '',
+        notes,
+      })
+    })
+
+  return {
+    flowName: source.name || 'Fluxo importado do Smart Recorder',
+    system: source.project?.name || '',
+    module: '',
+    objective: `Documentar e enriquecer o fluxo capturado pelo Smart Recorder.${source.startUrl ? ` URL inicial: ${source.startUrl}.` : ''}`,
+    preconditions: source.environment ? `Ambiente: ${source.environment}` : '',
+    testData: 'Valores parametrizados vindos do Smart Recorder, como {{password}}, devem ser preenchidos no QA Runner/Cypress.env().',
+    expectedResult: '',
+    steps,
+  }
+}
+
 function loadStoredBlueprint(): AutomationBlueprint {
   if (typeof window === 'undefined') return exampleBlueprint
 
@@ -217,6 +328,7 @@ export function AutomationBlueprintPage() {
   const [blueprint, setBlueprint] = useState<AutomationBlueprint>(() => initialBlueprintRef.current || exampleBlueprint)
   const [selectedStepId, setSelectedStepId] = useState<string>(() => initialBlueprintRef.current?.steps[0]?.id || '')
   const [saveStatus, setSaveStatus] = useState('Rascunho salvo neste navegador')
+  const [pastedJson, setPastedJson] = useState('')
 
   useEffect(() => {
     try {
@@ -321,15 +433,25 @@ export function AutomationBlueprintPage() {
     await navigator.clipboard.writeText(consolidatedCypress)
   }
 
+  function importBlueprintJsonContent(content: string) {
+    try {
+      const parsed = JSON.parse(content) as AutomationBlueprint | SmartRecorderBlueprint
+      const importedBlueprint = isSmartRecorderBlueprint(parsed)
+        ? smartRecorderToAutomationBlueprint(parsed)
+        : hydrateBlueprint(parsed as AutomationBlueprint)
+      setBlueprint(importedBlueprint)
+      setSelectedStepId(importedBlueprint.steps[0]?.id || '')
+      setPastedJson('')
+      setSaveStatus(isSmartRecorderBlueprint(parsed) ? 'JSON do Smart Recorder importado para edicao manual' : 'JSON importado e salvo automaticamente neste navegador')
+    } catch {
+      setSaveStatus('Nao foi possivel importar o JSON informado')
+    }
+  }
+
   async function importBlueprintJson(file: File) {
     try {
       const content = await file.text()
-      const importedBlueprint = hydrateBlueprint(JSON.parse(content) as AutomationBlueprint)
-      setBlueprint(importedBlueprint)
-      setSelectedStepId(importedBlueprint.steps[0]?.id || '')
-      setSaveStatus('JSON importado e salvo automaticamente neste navegador')
-    } catch {
-      setSaveStatus('Nao foi possivel importar o JSON selecionado')
+      importBlueprintJsonContent(content)
     } finally {
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
@@ -383,6 +505,33 @@ export function AutomationBlueprintPage() {
       <div className="rounded-2xl border border-accent/20 bg-accent/8 px-4 py-3 text-sm text-muted">
         {saveStatus}. Se recarregar a pagina neste mesmo navegador, o rascunho sera recuperado automaticamente.
       </div>
+
+      <Card className="space-y-4 border border-border/80 bg-white/[0.02]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm text-muted">Importacao rapida</p>
+            <h2 className="font-display text-xl font-bold text-foreground">Colar JSON do Smart Recorder</h2>
+            <p className="mt-1 text-sm text-muted">
+              Cole aqui o JSON exportado pelo Smart Recorder para transformar os passos capturados em blueprint editavel.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => importBlueprintJsonContent(pastedJson)}
+            disabled={!pastedJson.trim()}
+          >
+            <FileJson className="mr-2 h-4 w-4" />
+            Importar JSON colado
+          </Button>
+        </div>
+        <textarea
+          value={pastedJson}
+          onChange={(event) => setPastedJson(event.target.value)}
+          className="min-h-[160px] w-full rounded-2xl border border-border bg-black/20 px-4 py-3 font-mono text-xs text-foreground outline-none placeholder:text-muted/70 focus:border-accent/40"
+          placeholder='Cole aqui o JSON exportado pelo Smart Recorder, por exemplo: { "name": "login admin", "steps": [...] }'
+          spellCheck={false}
+        />
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="space-y-6">

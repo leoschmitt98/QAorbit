@@ -3,10 +3,13 @@ import { Card } from '@/components/ui/card'
 
 interface ProblemStructuringFormProps {
   value: ProblemStructuring
+  analysisMode?: 'ticket' | 'homologation'
   onChange: (value: ProblemStructuring) => void
 }
 
-export function ProblemStructuringForm({ value, onChange }: ProblemStructuringFormProps) {
+export function ProblemStructuringForm({ value, analysisMode = 'ticket', onChange }: ProblemStructuringFormProps) {
+  const isHomologation = analysisMode === 'homologation'
+
   function update<K extends keyof ProblemStructuring>(key: K, nextValue: ProblemStructuring[K]) {
     onChange({ ...value, [key]: nextValue })
   }
@@ -15,15 +18,20 @@ export function ProblemStructuringForm({ value, onChange }: ProblemStructuringFo
     <Card className="space-y-5">
       <div>
         <p className="text-sm text-muted">Etapa 2</p>
-        <h3 className="font-display text-2xl font-bold text-foreground">Estruturacao do problema</h3>
+        <h3 className="font-display text-2xl font-bold text-foreground">{isHomologation ? 'Estruturacao da validacao' : 'Estruturacao do problema'}</h3>
+        <p className="mt-2 text-sm text-muted">
+          {isHomologation
+            ? 'Use esta etapa para organizar objetivo, criterios esperados, cobertura e massa de teste da bateria de homologacao.'
+            : 'Organize o problema relatado, o comportamento esperado e o que precisa ser comprovado no reteste.'}
+        </p>
       </div>
 
       <div className="grid gap-4">
-        <TextAreaField label="Descricao do problema" value={value.problemDescription} onChange={(nextValue) => update('problemDescription', nextValue)} />
-        <TextAreaField label="Analise inicial" value={value.initialAnalysis} onChange={(nextValue) => update('initialAnalysis', nextValue)} />
+        <TextAreaField label={isHomologation ? 'Cenario / objetivo da validacao' : 'Descricao do problema'} value={value.problemDescription} onChange={(nextValue) => update('problemDescription', nextValue)} />
+        <TextAreaField label={isHomologation ? 'Analise inicial / cobertura planejada' : 'Analise inicial'} value={value.initialAnalysis} onChange={(nextValue) => update('initialAnalysis', nextValue)} />
         <div className="grid gap-4 xl:grid-cols-2">
           <TextAreaField label="Comportamento esperado" value={value.expectedBehavior} onChange={(nextValue) => update('expectedBehavior', nextValue)} />
-          <TextAreaField label="Comportamento relatado" value={value.reportedBehavior} onChange={(nextValue) => update('reportedBehavior', nextValue)} />
+          <TextAreaField label={isHomologation ? 'Comportamento observado durante a execucao' : 'Comportamento relatado'} value={value.reportedBehavior} onChange={(nextValue) => update('reportedBehavior', nextValue)} />
         </div>
         <TextAreaField label="Regra / documentacao relacionada" value={value.relatedDocumentation} onChange={(nextValue) => update('relatedDocumentation', nextValue)} />
         <TextAreaField label="Dados de teste" value={value.testData} onChange={(nextValue) => update('testData', nextValue)} />

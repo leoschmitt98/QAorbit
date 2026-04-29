@@ -8,6 +8,8 @@ import {
   LayoutDashboard,
   Settings,
   ListChecks,
+  PlaySquare,
+  RadioTower,
   Workflow,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
@@ -18,6 +20,8 @@ const items = [
   { to: '/agents', label: 'Central de Agentes', icon: Bot },
   { to: '/analysis/new', label: 'Nova Analise', icon: Workflow },
   { to: '/automation/blueprint', label: 'Blueprint de Automacao', icon: Bot },
+  { to: '/automation/smart-recorder', label: 'Smart Recorder', icon: RadioTower },
+  { to: '/automation/qa-runner', label: 'QA Runner', icon: PlaySquare },
   { to: '/flows/history', label: 'Historico de Fluxos', icon: History },
   { to: '/historical-tests', label: 'Historico de Testes', icon: History },
   { to: '/projects', label: 'Projetos', icon: FolderKanban },

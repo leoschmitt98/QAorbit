@@ -1,0 +1,14 @@
+{
+  "name": "qa-orbit-cypress-runner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cy:open": "cypress open",
+    "cy:run": "cypress run",
+    "test:login-admin": "cypress run --spec cypress/e2e/orbit/login-admin.cy.js"
+  },
+  "devDependencies": {
+    "cypress": "13.17.0"
+  }
+}

@@ -20,8 +20,10 @@ import { HistoricalTestsPage } from '@/pages/historical-tests-page'
 import { NewAnalysisPage } from '@/pages/new-analysis-page'
 import { ProjectDetailPage } from '@/pages/project-detail-page'
 import { ProjectsPage } from '@/pages/projects-page'
+import { QaRunnerPage } from '@/pages/qa-runner-page'
 import { ReportsPage } from '@/pages/reports-page'
 import { SettingsPage } from '@/pages/settings-page'
+import { SmartRecorderPage } from '@/pages/smart-recorder-page'
 import { TestPlanDetailPage } from '@/pages/test-plan-detail-page'
 import { TestPlansPage } from '@/pages/test-plans-page'
 import { LoginPage } from '@/pages/login-page'
@@ -53,6 +55,8 @@ const router = createBrowserRouter([
       { path: 'agents', element: <CentralAgentsPage /> },
       { path: 'analysis/new', element: <NewAnalysisPage /> },
       { path: 'automation/blueprint', element: <AutomationBlueprintPage /> },
+      { path: 'automation/smart-recorder', element: <SmartRecorderPage /> },
+      { path: 'automation/qa-runner', element: <QaRunnerPage /> },
       { path: 'flows/history', element: <FlowHistoryPage /> },
       { path: 'historical-tests', element: <HistoricalTestsPage /> },
       { path: 'historical-tests/:recordId', element: <HistoricalTestDetailPage /> },

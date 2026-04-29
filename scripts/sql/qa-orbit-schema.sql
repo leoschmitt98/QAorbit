@@ -1,6 +1,3 @@
-USE [QA orbit];
-GO
-
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
 GO
@@ -10,6 +7,7 @@ GO
   Estrategia:
   - Banco guarda entidades, relacionamento, metadados e caminhos
   - Storage fisico continua para arquivos pesados: DOCX/PDF, GIF, PNG, Word e anexos
+  - Execute este script no banco selecionado no SSMS, por exemplo QAOrbit
 */
 
 IF OBJECT_ID('dbo.Projetos', 'U') IS NULL
@@ -37,6 +35,25 @@ BEGIN
   );
 
   CREATE UNIQUE INDEX UX_Areas_Nome ON dbo.Areas (Nome);
+END
+GO
+
+IF OBJECT_ID('dbo.UsuariosQaOrbit', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.UsuariosQaOrbit (
+    UserId NVARCHAR(120) NOT NULL PRIMARY KEY,
+    Nome NVARCHAR(180) NOT NULL,
+    Email NVARCHAR(180) NOT NULL,
+    RoleName NVARCHAR(40) NOT NULL,
+    PasswordHash NVARCHAR(255) NOT NULL,
+    PasswordSalt NVARCHAR(120) NOT NULL,
+    Ativo BIT NOT NULL CONSTRAINT DF_UsuariosQaOrbit_Ativo DEFAULT (1),
+    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_UsuariosQaOrbit_CreatedAt DEFAULT (SYSDATETIME()),
+    UpdatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_UsuariosQaOrbit_UpdatedAt DEFAULT (SYSDATETIME())
+  );
+
+  CREATE UNIQUE INDEX UX_UsuariosQaOrbit_Email ON dbo.UsuariosQaOrbit (Email);
+  CREATE INDEX IX_UsuariosQaOrbit_Ativo_RoleName ON dbo.UsuariosQaOrbit (Ativo, RoleName);
 END
 GO
 
@@ -157,6 +174,8 @@ BEGIN
     LifecycleStatus NVARCHAR(40) NOT NULL CONSTRAINT DF_Chamados_LifecycleStatus DEFAULT ('Em andamento'),
     PromptMode NVARCHAR(80) NULL,
     AiResponse NVARCHAR(MAX) NULL,
+    CreatedByUserId NVARCHAR(120) NULL,
+    UpdatedByUserId NVARCHAR(120) NULL,
     DataCriacao DATETIME2(0) NOT NULL CONSTRAINT DF_Chamados_DataCriacao DEFAULT (SYSDATETIME()),
     DataAtualizacao DATETIME2(0) NOT NULL CONSTRAINT DF_Chamados_DataAtualizacao DEFAULT (SYSDATETIME()),
     DataFinalizacao DATETIME2(0) NULL,
@@ -167,6 +186,29 @@ BEGIN
 
   CREATE INDEX IX_Chamados_ProjetoModulo ON dbo.Chamados (ProjetoId, ModuloId);
   CREATE INDEX IX_Chamados_LifecycleStatus ON dbo.Chamados (LifecycleStatus);
+END
+GO
+
+IF COL_LENGTH('dbo.Chamados', 'CreatedByUserId') IS NULL
+BEGIN
+  ALTER TABLE dbo.Chamados ADD CreatedByUserId NVARCHAR(120) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.Chamados', 'UpdatedByUserId') IS NULL
+BEGIN
+  ALTER TABLE dbo.Chamados ADD UpdatedByUserId NVARCHAR(120) NULL;
+END
+GO
+
+IF NOT EXISTS (
+  SELECT 1
+  FROM sys.indexes
+  WHERE name = 'IX_Chamados_CreatedByUserId'
+    AND object_id = OBJECT_ID('dbo.Chamados')
+)
+BEGIN
+  CREATE INDEX IX_Chamados_CreatedByUserId ON dbo.Chamados (CreatedByUserId);
 END
 GO
 
@@ -265,7 +307,7 @@ BEGIN
     Ordem INT NOT NULL CONSTRAINT DF_ChamadoRetestePassoQuadros_Ordem DEFAULT (0),
     CONSTRAINT PK_ChamadoRetestePassoQuadros PRIMARY KEY (PassoId, QuadroId),
     CONSTRAINT FK_ChamadoRetestePassoQuadros_Passos FOREIGN KEY (PassoId) REFERENCES dbo.ChamadoRetestePassos (PassoId) ON DELETE CASCADE,
-    CONSTRAINT FK_ChamadoRetestePassoQuadros_Quadros FOREIGN KEY (QuadroId) REFERENCES dbo.ChamadoRetesteQuadros (QuadroId) ON DELETE CASCADE
+    CONSTRAINT FK_ChamadoRetestePassoQuadros_Quadros FOREIGN KEY (QuadroId) REFERENCES dbo.ChamadoRetesteQuadros (QuadroId)
   );
 END
 GO
@@ -357,6 +399,8 @@ BEGIN
     DescricaoProblemaChamado NVARCHAR(MAX) NULL,
     AnaliseInicial NVARCHAR(MAX) NULL,
     DocumentoBaseNome NVARCHAR(255) NULL,
+    CreatedByUserId NVARCHAR(120) NULL,
+    UpdatedByUserId NVARCHAR(120) NULL,
     DataCriacao DATETIME2(0) NOT NULL CONSTRAINT DF_Bugs_DataCriacao DEFAULT (SYSDATETIME()),
     DataAtualizacao DATETIME2(0) NOT NULL CONSTRAINT DF_Bugs_DataAtualizacao DEFAULT (SYSDATETIME()),
     CONSTRAINT FK_Bugs_Chamados FOREIGN KEY (TicketId) REFERENCES dbo.Chamados (TicketId),
@@ -367,6 +411,29 @@ BEGIN
 
   CREATE INDEX IX_Bugs_TicketId ON dbo.Bugs (TicketId);
   CREATE INDEX IX_Bugs_ProjetoModulo ON dbo.Bugs (ProjetoId, ModuloId);
+END
+GO
+
+IF COL_LENGTH('dbo.Bugs', 'CreatedByUserId') IS NULL
+BEGIN
+  ALTER TABLE dbo.Bugs ADD CreatedByUserId NVARCHAR(120) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.Bugs', 'UpdatedByUserId') IS NULL
+BEGIN
+  ALTER TABLE dbo.Bugs ADD UpdatedByUserId NVARCHAR(120) NULL;
+END
+GO
+
+IF NOT EXISTS (
+  SELECT 1
+  FROM sys.indexes
+  WHERE name = 'IX_Bugs_CreatedByUserId'
+    AND object_id = OBJECT_ID('dbo.Bugs')
+)
+BEGIN
+  CREATE INDEX IX_Bugs_CreatedByUserId ON dbo.Bugs (CreatedByUserId);
 END
 GO
 
@@ -427,6 +494,7 @@ BEGIN
     FrameworkAutomacao NVARCHAR(50) NULL,
     CaminhoSpec NVARCHAR(500) NULL,
     PalavraChaveBusca NVARCHAR(MAX) NULL,
+    CreatedByUserId NVARCHAR(120) NULL,
     DataCriacao DATETIME2(0) NOT NULL CONSTRAINT DF_HistoricoTestes_DataCriacao DEFAULT (SYSDATETIME()),
     CONSTRAINT FK_HistoricoTestes_Chamados FOREIGN KEY (TicketId) REFERENCES dbo.Chamados (TicketId),
     CONSTRAINT FK_HistoricoTestes_Bugs FOREIGN KEY (BugId) REFERENCES dbo.Bugs (BugId),
@@ -437,6 +505,23 @@ BEGIN
 
   CREATE INDEX IX_HistoricoTestes_ProjetoModuloArea ON dbo.HistoricoTestes (ProjetoId, ModuloPrincipalId, AreaId);
   CREATE INDEX IX_HistoricoTestes_TicketId ON dbo.HistoricoTestes (TicketId);
+END
+GO
+
+IF COL_LENGTH('dbo.HistoricoTestes', 'CreatedByUserId') IS NULL
+BEGIN
+  ALTER TABLE dbo.HistoricoTestes ADD CreatedByUserId NVARCHAR(120) NULL;
+END
+GO
+
+IF NOT EXISTS (
+  SELECT 1
+  FROM sys.indexes
+  WHERE name = 'IX_HistoricoTestes_CreatedByUserId'
+    AND object_id = OBJECT_ID('dbo.HistoricoTestes')
+)
+BEGIN
+  CREATE INDEX IX_HistoricoTestes_CreatedByUserId ON dbo.HistoricoTestes (CreatedByUserId);
 END
 GO
 
@@ -690,6 +775,79 @@ BEGIN
   );
 
   CREATE INDEX IX_DemandaCenarioEvidencias_CenarioId ON dbo.DemandaCenarioEvidencias (DemandaCenarioId, Ordem, CriadoEm);
+END
+GO
+
+IF OBJECT_ID('dbo.SmartRecorderSessions', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.SmartRecorderSessions (
+    Id NVARCHAR(120) NOT NULL PRIMARY KEY,
+    ProjetoId INT NOT NULL,
+    NomeFluxo NVARCHAR(250) NOT NULL,
+    UrlInicial NVARCHAR(1000) NOT NULL,
+    Ambiente NVARCHAR(120) NULL,
+    Status NVARCHAR(40) NOT NULL CONSTRAINT DF_SmartRecorderSessions_Status DEFAULT ('recording'),
+    Observacoes NVARCHAR(MAX) NULL,
+    CaptureToken NVARCHAR(120) NULL,
+    CaptureTokenExpiresAt DATETIME2(0) NULL,
+    CriadoPorUsuarioId NVARCHAR(120) NULL,
+    CriadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_SmartRecorderSessions_CriadoEm DEFAULT (SYSDATETIME()),
+    AtualizadoEm DATETIME2(0) NOT NULL CONSTRAINT DF_SmartRecorderSessions_AtualizadoEm DEFAULT (SYSDATETIME()),
+    FinalizadoEm DATETIME2(0) NULL,
+    CONSTRAINT FK_SmartRecorderSessions_Projetos FOREIGN KEY (ProjetoId) REFERENCES dbo.Projetos (Id)
+  );
+
+  CREATE INDEX IX_SmartRecorderSessions_ProjetoId ON dbo.SmartRecorderSessions (ProjetoId, AtualizadoEm DESC);
+  CREATE INDEX IX_SmartRecorderSessions_CriadoPorUsuarioId ON dbo.SmartRecorderSessions (CriadoPorUsuarioId);
+END
+GO
+
+IF COL_LENGTH('dbo.SmartRecorderSessions', 'CaptureToken') IS NULL
+BEGIN
+  ALTER TABLE dbo.SmartRecorderSessions ADD CaptureToken NVARCHAR(120) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.SmartRecorderSessions', 'CaptureTokenExpiresAt') IS NULL
+BEGIN
+  ALTER TABLE dbo.SmartRecorderSessions ADD CaptureTokenExpiresAt DATETIME2(0) NULL;
+END
+GO
+
+IF OBJECT_ID('dbo.SmartRecorderSteps', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.SmartRecorderSteps (
+    Id NVARCHAR(120) NOT NULL PRIMARY KEY,
+    SessionId NVARCHAR(120) NOT NULL,
+    Ordem INT NOT NULL,
+    Action NVARCHAR(40) NOT NULL,
+    Title NVARCHAR(250) NULL,
+    CurrentUrl NVARCHAR(1000) NULL,
+    SelectorRecommended NVARCHAR(1000) NULL,
+    SelectorFallback NVARCHAR(1000) NULL,
+    SelectorReason NVARCHAR(500) NULL,
+    ElementText NVARCHAR(500) NULL,
+    TagName NVARCHAR(80) NULL,
+    ElementType NVARCHAR(80) NULL,
+    ElementId NVARCHAR(250) NULL,
+    ElementName NVARCHAR(250) NULL,
+    DataTestId NVARCHAR(250) NULL,
+    DataCy NVARCHAR(250) NULL,
+    DataTest NVARCHAR(250) NULL,
+    AriaLabel NVARCHAR(250) NULL,
+    RoleName NVARCHAR(120) NULL,
+    Classes NVARCHAR(1000) NULL,
+    InputValue NVARCHAR(MAX) NULL,
+    ValueMode NVARCHAR(40) NULL,
+    HtmlSnippet NVARCHAR(2000) NULL,
+    ExpectedResult NVARCHAR(MAX) NULL,
+    Notes NVARCHAR(MAX) NULL,
+    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_SmartRecorderSteps_CreatedAt DEFAULT (SYSDATETIME()),
+    UpdatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_SmartRecorderSteps_UpdatedAt DEFAULT (SYSDATETIME()),
+    CONSTRAINT FK_SmartRecorderSteps_Sessions FOREIGN KEY (SessionId) REFERENCES dbo.SmartRecorderSessions (Id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IX_SmartRecorderSteps_SessionId ON dbo.SmartRecorderSteps (SessionId, Ordem);
 END
 GO
 

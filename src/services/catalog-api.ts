@@ -93,6 +93,23 @@ export async function createCatalogModule(payload: { projetoId: string; nome: st
   return response.json() as Promise<CatalogModulo>
 }
 
+export async function createCatalogProject(payload: { nome: string }) {
+  const response = await fetch('/api/projetos', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null)
+    throw new Error(errorBody?.message || 'Nao foi possivel cadastrar o projeto.')
+  }
+
+  return response.json() as Promise<CatalogOption>
+}
+
 export async function createCatalogProjectPortal(payload: { projetoId: string; nome: string }) {
   const response = await fetch('/api/projeto-portais', {
     method: 'POST',

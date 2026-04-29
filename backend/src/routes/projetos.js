@@ -506,6 +506,61 @@ router.get('/', async (_req, res) => {
   }
 })
 
+router.post('/', async (req, res) => {
+  const nome = String(req.body?.nome || '').trim()
+
+  if (!nome) {
+    return res.status(400).json({ message: 'Informe o nome do projeto.' })
+  }
+
+  if (nome.length > 200) {
+    return res.status(400).json({ message: 'O nome do projeto deve ter no maximo 200 caracteres.' })
+  }
+
+  try {
+    const pool = await getPool()
+
+    if (!pool) {
+      const rows = await executeTrustedJson(`
+        DECLARE @Inserted TABLE (id VARCHAR(20), nome NVARCHAR(200));
+
+        IF EXISTS (SELECT 1 FROM dbo.Projetos WHERE Nome = N'${nome.replace(/'/g, "''")}' AND Ativo = 1)
+          THROW 51001, 'Ja existe um projeto ativo com este nome.', 1;
+
+        INSERT INTO dbo.Projetos (Nome, Ativo, DataCriacao, DataAtualizacao)
+        OUTPUT CAST(inserted.Id AS VARCHAR(20)), inserted.Nome INTO @Inserted
+        VALUES (N'${nome.replace(/'/g, "''")}', 1, SYSDATETIME(), SYSDATETIME());
+
+        SELECT id, nome FROM @Inserted FOR JSON PATH;
+      `)
+      return res.status(201).json(rows[0])
+    }
+
+    const request = createRequest(pool)
+    request.input('nome', sql.NVarChar(200), nome)
+    const result = await request.query(`
+      IF EXISTS (SELECT 1 FROM dbo.Projetos WHERE Nome = @nome AND Ativo = 1)
+        THROW 51001, 'Ja existe um projeto ativo com este nome.', 1;
+
+      DECLARE @Inserted TABLE (id VARCHAR(20), nome NVARCHAR(200));
+
+      INSERT INTO dbo.Projetos (Nome, Ativo, DataCriacao, DataAtualizacao)
+      OUTPUT CAST(inserted.Id AS VARCHAR(20)), inserted.Nome INTO @Inserted
+      VALUES (@nome, 1, SYSDATETIME(), SYSDATETIME());
+
+      SELECT id, nome FROM @Inserted;
+    `)
+
+    return res.status(201).json(result.recordset[0])
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Erro desconhecido'
+    return res.status(detail.includes('Ja existe') ? 409 : 500).json({
+      message: detail.includes('Ja existe') ? 'Ja existe um projeto ativo com este nome.' : 'Nao foi possivel cadastrar o projeto.',
+      detail,
+    })
+  }
+})
+
 router.delete('/:projectId', async (req, res) => {
   const projectId = Number(req.params.projectId)
 

@@ -16,7 +16,13 @@ import { Card } from '@/components/ui/card'
 import { GlowButton } from '@/components/ui/glow-button'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { listCatalogModules, useCatalogAreasQuery, useCatalogModulesQuery, useCatalogProjectsQuery } from '@/services/catalog-api'
+import {
+  listCatalogModules,
+  useCatalogAreasQuery,
+  useCatalogModulesQuery,
+  useCatalogProjectPortalsQuery,
+  useCatalogProjectsQuery,
+} from '@/services/catalog-api'
 import { downloadEvidenceDocx } from '@/services/evidence-export-api'
 import { deleteFlowProgress, listSavedFlows, loadFlowProgress, saveFlowProgress, updateFlowLifecycleStatus } from '@/services/flow-progress-api'
 import { useFunctionalDocumentsQuery } from '@/services/functional-docs-api'
@@ -37,7 +43,7 @@ import type {
   TicketContext,
 } from '@/types/domain'
 
-const steps = [
+const ticketSteps = [
   'Contexto do chamado',
   'Estruturacao do problema',
   'Execucao do reteste',
@@ -45,6 +51,17 @@ const steps = [
   'Consolidacao da evidencia',
   'Classificacao para reuso',
 ]
+
+const homologationSteps = [
+  'Contexto da validacao',
+  'Estruturacao da validacao',
+  'Execucao do teste',
+  'Cenarios complementares',
+  'Consolidacao da evidencia',
+  'Classificacao para reuso',
+]
+
+type AnalysisMode = 'ticket' | 'homologation'
 
 const emptyTicket: TicketContext = {
   ticketId: '',
@@ -124,6 +141,7 @@ export function NewAnalysisPage() {
   const { visibility } = useWorkspaceScope()
   const [searchParams, setSearchParams] = useSearchParams()
   const [currentStep, setCurrentStep] = useState(0)
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('ticket')
   const [ticket, setTicket] = useState<TicketContext>(emptyTicket)
   const [problem, setProblem] = useState<ProblemStructuring>(emptyProblem)
   const [retest, setRetest] = useState<RetestExecutionDraft>(emptyRetest)
@@ -152,9 +170,11 @@ export function NewAnalysisPage() {
   )
   const [historyMessage, setHistoryMessage] = useState('Quando o fluxo estiver consistente, salve-o no histórico para reutilizar esse cenário no futuro.')
   const [exportMessage, setExportMessage] = useState('Preencha o chamado, capture os quadros e gere o documento quando estiver pronto.')
+  const steps = analysisMode === 'homologation' ? homologationSteps : ticketSteps
 
   const projectsQuery = useCatalogProjectsQuery()
   const areasQuery = useCatalogAreasQuery()
+  const projectPortalsQuery = useCatalogProjectPortalsQuery(ticket.projectId)
   const modulesQuery = useCatalogModulesQuery(ticket.projectId)
   const functionalDocumentsQuery = useFunctionalDocumentsQuery({
     projectId: ticket.projectId,
@@ -164,6 +184,7 @@ export function NewAnalysisPage() {
   const catalogProjects = projectsQuery.data ?? []
   const catalogModules = modulesQuery.data ?? []
   const catalogAreas = areasQuery.data ?? []
+  const catalogProjectPortals = projectPortalsQuery.data ?? []
   const relatedFunctionalDocs = functionalDocumentsQuery.data ?? []
   const selectedFunctionalDocs = relatedFunctionalDocs.filter((document) =>
     selectedFunctionalDocumentIds.includes(document.id),
@@ -186,7 +207,9 @@ export function NewAnalysisPage() {
   const selectedModule =
     catalogModules.find((item) => item.id === ticket.moduleId)?.nome ?? (ticket.moduleId || '-')
   const selectedArea =
-    catalogAreas.find((item) => item.id === ticket.portalArea)?.nome ?? ticket.portalArea
+    catalogProjectPortals.find((item) => item.nome === ticket.portalArea || item.id === ticket.portalArea)?.nome ??
+    catalogAreas.find((item) => item.id === ticket.portalArea || item.nome === ticket.portalArea)?.nome ??
+    ticket.portalArea
   const extractedArtifacts = useMemo(() => extractArtifactPaths(ticket.developerChangelog), [ticket.developerChangelog])
   const relatedHistoryEnabled = Boolean(
     ticket.projectId.trim() &&
@@ -220,7 +243,7 @@ export function NewAnalysisPage() {
   })
 
   const ticketContextError =
-    projectsQuery.error || areasQuery.error || modulesQuery.error
+    projectsQuery.error || areasQuery.error || modulesQuery.error || projectPortalsQuery.error
       ? 'Nao foi possivel sincronizar alguns catalogos agora.'
       : null
 
@@ -779,8 +802,9 @@ export function NewAnalysisPage() {
   }
 
   function buildPromptByMode(mode: PromptAnalysisMode, relatedRecords: HistoricalTestRecommendation[]) {
+    const isHomologation = analysisMode === 'homologation'
     const contextBlock = [
-      `Chamado: ${ticket.ticketId || 'Nao informado'}`,
+      `${isHomologation ? 'ID da validacao' : 'Chamado'}: ${ticket.ticketId || 'Nao informado'}`,
       `Titulo: ${ticket.title || 'Nao informado'}`,
       `Projeto: ${selectedProject}`,
       `Modulo principal: ${selectedModule}`,
@@ -788,16 +812,16 @@ export function NewAnalysisPage() {
       `Tipo de produto: ${ticket.productType}`,
       `Ambiente: ${ticket.environment || 'Nao informado'}`,
       `Versao/Hotfix: ${ticket.version || 'Nao informado'}`,
-      `Origem do chamado: ${ticket.origin}`,
+      `${isHomologation ? 'Origem da validacao' : 'Origem do chamado'}: ${ticket.origin}`,
       `Documento base: ${ticket.documentoBaseName || 'Nao informado'}`,
     ].join('\n')
 
     const problemBlock = [
-      `Descricao original do cliente: ${sanitizeMultiline(ticket.customerProblemDescription)}`,
-      `Descricao estruturada do problema: ${sanitizeMultiline(problem.problemDescription)}`,
-      `Analise inicial do QA/suporte: ${sanitizeMultiline(problem.initialAnalysis)}`,
+      `${isHomologation ? 'Objetivo/escopo da homologacao' : 'Descricao original do cliente'}: ${sanitizeMultiline(ticket.customerProblemDescription)}`,
+      `${isHomologation ? 'Cenario/objetivo estruturado' : 'Descricao estruturada do problema'}: ${sanitizeMultiline(problem.problemDescription)}`,
+      `${isHomologation ? 'Analise inicial/cobertura planejada' : 'Analise inicial do QA/suporte'}: ${sanitizeMultiline(problem.initialAnalysis)}`,
       `Comportamento esperado: ${sanitizeMultiline(problem.expectedBehavior)}`,
-      `Comportamento relatado/obtido: ${sanitizeMultiline(problem.reportedBehavior || retest.obtainedBehavior)}`,
+      `${isHomologation ? 'Comportamento observado/obtido' : 'Comportamento relatado/obtido'}: ${sanitizeMultiline(problem.reportedBehavior || retest.obtainedBehavior)}`,
       `Regra ou documentacao relacionada: ${sanitizeMultiline(problem.relatedDocumentation)}`,
       `Dados de teste: ${sanitizeMultiline(problem.testData)}`,
     ].join('\n')
@@ -991,20 +1015,87 @@ export function NewAnalysisPage() {
     [savedFlows, ticket.ticketId],
   )
 
+  function generateInternalValidationId(mode: AnalysisMode = analysisMode) {
+    const prefix = mode === 'homologation' ? 'HML' : 'QA'
+    return `${prefix}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-5)}`
+  }
+
+  function handleAnalysisModeChange(nextMode: AnalysisMode) {
+    setAnalysisMode(nextMode)
+    setTicket((current) => ({
+      ...current,
+      origin: nextMode === 'homologation' ? 'Interno' : current.origin,
+      ticketId: nextMode === 'homologation' && !current.ticketId.trim() ? generateInternalValidationId(nextMode) : current.ticketId,
+    }))
+  }
+
   return (
     <div className="space-y-6">
       <SectionHeader
         eyebrow="Nova analise"
-        title="Fluxo operacional de validacao de chamados"
-        description="Conduza o ticket do contexto inicial ate a evidencia final com rastreabilidade, cenarios complementares e classificacao para reuso."
+        title={analysisMode === 'homologation' ? 'Bateria de homologacao e regressao' : 'Fluxo operacional de validacao de chamados'}
+        description={
+          analysisMode === 'homologation'
+            ? 'Conduza uma bateria de testes sem depender de chamado de cliente: defina escopo, execute, evidencie e salve no historico para regressao.'
+            : 'Conduza o ticket do contexto inicial ate a evidencia final com rastreabilidade, cenarios complementares e classificacao para reuso.'
+        }
       />
 
       <Card className="space-y-5">
+        <div className="rounded-2xl border border-border bg-white/[0.02] p-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Tipo de trabalho</p>
+              <p className="mt-1 text-sm text-muted">
+                Escolha se esta analise nasceu de um chamado ou se e uma validacao planejada de homologacao/regressao.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleAnalysisModeChange('ticket')}
+                className={`rounded-2xl border px-4 py-2 text-sm font-semibold transition ${
+                  analysisMode === 'ticket'
+                    ? 'border-accent/35 bg-accent/12 text-foreground shadow-glow'
+                    : 'border-border bg-black/20 text-muted hover:border-accent/25 hover:text-foreground'
+                }`}
+              >
+                Chamado de cliente
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAnalysisModeChange('homologation')}
+                className={`rounded-2xl border px-4 py-2 text-sm font-semibold transition ${
+                  analysisMode === 'homologation'
+                    ? 'border-accent/35 bg-accent/12 text-foreground shadow-glow'
+                    : 'border-border bg-black/20 text-muted hover:border-accent/25 hover:text-foreground'
+                }`}
+              >
+                Homologacao / regressao
+              </button>
+            </div>
+          </div>
+          {analysisMode === 'homologation' ? (
+            <div className="mt-4 rounded-2xl border border-accent/15 bg-accent/8 p-4 text-sm text-muted">
+              Neste modo, campos como relato do cliente viram objetivo/escopo da validacao. Use para baterias planejadas, smoke tests, homologacao de release e regressao sem chamado.
+              {!ticket.ticketId.trim() ? (
+                <button
+                  type="button"
+                  onClick={() => setTicket((current) => ({ ...current, ticketId: generateInternalValidationId('homologation'), origin: 'Interno' }))}
+                  className="ml-2 font-semibold text-accent"
+                >
+                  Gerar ID interno.
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white/[0.02] px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-foreground">Organizacao da tela</p>
             <p className="text-sm text-muted">
-              Use o modo de foco para priorizar o preenchimento do chamado e abrir o painel lateral apenas quando precisar.
+              Use o modo de foco para priorizar o preenchimento da analise e abrir o painel lateral apenas quando precisar.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1043,12 +1134,15 @@ export function NewAnalysisPage() {
             {currentStep === 0 ? (
               <TicketContextForm
                 value={ticket}
+                analysisMode={analysisMode}
                 projects={catalogProjects}
                 modules={catalogModules}
                 areas={catalogAreas}
+                testLocations={catalogProjectPortals}
                 projectsLoading={projectsQuery.isLoading}
                 modulesLoading={modulesQuery.isLoading}
                 areasLoading={areasQuery.isLoading}
+                testLocationsLoading={projectPortalsQuery.isLoading}
                 errorMessage={ticketContextError}
                 importMessage={documentImportMessage}
                 importTextMessage={clipboardImportMessage}
@@ -1057,7 +1151,7 @@ export function NewAnalysisPage() {
                 onChange={setTicket}
               />
             ) : null}
-            {currentStep === 1 ? <ProblemStructuringForm value={problem} onChange={setProblem} /> : null}
+            {currentStep === 1 ? <ProblemStructuringForm value={problem} analysisMode={analysisMode} onChange={setProblem} /> : null}
             {currentStep === 2 ? <RetestExecutionForm ticketId={ticket.ticketId} value={retest} onChange={setRetest} /> : null}
             {currentStep === 3 ? (
               <ComplementaryScenariosForm
@@ -1124,11 +1218,11 @@ export function NewAnalysisPage() {
                 </div>
               ) : null}
               <div>
-                <p className="text-sm text-muted">Rascunho do chamado</p>
+                <p className="text-sm text-muted">{analysisMode === 'homologation' ? 'Rascunho da validacao' : 'Rascunho do chamado'}</p>
                 <h3 className="font-display text-xl font-bold text-foreground">Salvar e retomar progresso</h3>
               </div>
               <p className="text-sm text-muted">
-                Salve o andamento atual do chamado para continuar depois sem perder contexto, quadros e passos ja montados.
+                Salve o andamento atual para continuar depois sem perder contexto, quadros e passos ja montados.
               </p>
               <div className="flex flex-wrap gap-3">
                 <GlowButton onClick={() => void handleSaveProgress()}>
@@ -1138,11 +1232,11 @@ export function NewAnalysisPage() {
                   {isLoadingProgress
                     ? 'Carregando...'
                     : ticket.ticketId.trim()
-                      ? 'Carregar este chamado'
+                      ? analysisMode === 'homologation' ? 'Carregar esta validacao' : 'Carregar este chamado'
                       : 'Carregar ultimo salvo'}
                 </GlowButton>
                 <GlowButton onClick={() => void handleLifecycleChange('Finalizado')} disabled={isUpdatingLifecycle || !ticket.ticketId.trim()}>
-                  {isUpdatingLifecycle ? 'Atualizando...' : 'Finalizar chamado'}
+                  {isUpdatingLifecycle ? 'Atualizando...' : analysisMode === 'homologation' ? 'Finalizar validacao' : 'Finalizar chamado'}
                 </GlowButton>
                 <GlowButton onClick={() => void handleLifecycleChange('Em andamento')} disabled={isUpdatingLifecycle || !ticket.ticketId.trim()}>
                   Reabrir chamado
@@ -1151,7 +1245,7 @@ export function NewAnalysisPage() {
                   {isOpeningBug ? 'Abrindo bug...' : 'Vincular bug'}
                 </GlowButton>
                 <GlowButton onClick={() => void handleDeleteProgress()} disabled={isDeletingProgress || !ticket.ticketId.trim()}>
-                  {isDeletingProgress ? 'Excluindo...' : 'Excluir chamado'}
+                  {isDeletingProgress ? 'Excluindo...' : analysisMode === 'homologation' ? 'Excluir validacao' : 'Excluir chamado'}
                 </GlowButton>
               </div>
               <label className="flex items-center gap-3 rounded-2xl border border-border bg-white/[0.02] px-4 py-3 text-sm text-muted">
@@ -1161,7 +1255,7 @@ export function NewAnalysisPage() {
                   onChange={(event) => setShouldGenerateTestPlanScope(event.target.checked)}
                   className="h-4 w-4 rounded border-border bg-black/20 accent-[#38bdf8]"
                 />
-                <span>Gerar escopo de Test Plan ao finalizar este chamado</span>
+                <span>Gerar escopo de Test Plan ao finalizar {analysisMode === 'homologation' ? 'esta validacao' : 'este chamado'}</span>
               </label>
               <div className="rounded-2xl border border-border bg-white/[0.02] p-4 text-sm text-muted">
                 {progressMessage}
@@ -1193,7 +1287,7 @@ export function NewAnalysisPage() {
                             Excluir
                           </button>
                           <div className="text-right text-xs text-muted">
-                          <p>Status do chamado: {flow.lifecycleStatus}</p>
+                          <p>Status: {flow.lifecycleStatus}</p>
                           <p>Resultado do reteste: {flow.status}</p>
                           <p>{new Date(flow.updatedAt).toLocaleString('pt-BR')}</p>
                           </div>
@@ -1211,12 +1305,12 @@ export function NewAnalysisPage() {
 
             <Card className="space-y-4">
               <div>
-                <p className="text-sm text-muted">Painel do ticket</p>
+                <p className="text-sm text-muted">{analysisMode === 'homologation' ? 'Painel da validacao' : 'Painel do ticket'}</p>
                 <h3 className="font-display text-xl font-bold text-foreground">Resumo operacional</h3>
               </div>
               <div className="space-y-3">
                 {[
-                  ['Ticket', ticket.ticketId],
+                  [analysisMode === 'homologation' ? 'ID da validacao' : 'Ticket', ticket.ticketId],
                   ['Projeto', selectedProject],
                   ['Ambiente', ticket.environment],
                   ['Versao', ticket.version],
@@ -1255,12 +1349,12 @@ export function NewAnalysisPage() {
                 })}
               </div>
               <div className="rounded-2xl border border-accent/15 bg-accent/8 p-4">
-                <p className="text-sm font-semibold text-foreground">Status operacional do chamado</p>
+                <p className="text-sm font-semibold text-foreground">Status operacional {analysisMode === 'homologation' ? 'da validacao' : 'do chamado'}</p>
                 <div className="mt-3">
                   <StatusBadge value={currentSavedFlow?.lifecycleStatus ?? 'Em andamento'} />
                 </div>
                 <p className="mt-3 text-xs text-muted">
-                  Este status muda quando voce usa os botoes `Finalizar chamado` ou `Reabrir chamado`.
+                  Este status muda quando voce finaliza ou reabre o fluxo operacional.
                 </p>
               </div>
               <div className="rounded-2xl border border-border bg-white/[0.02] p-4">

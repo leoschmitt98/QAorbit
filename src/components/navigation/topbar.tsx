@@ -1,7 +1,8 @@
-import { Bell, Sparkles, Search } from 'lucide-react'
+import { Bell, ExternalLink, Sparkles, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { QA_ORBIT_INSTRUCTOR_GPT_URL } from '@/config/external-links'
 import { useAuth } from '@/hooks/use-auth'
 import { useProjectScope } from '@/hooks/use-project-scope'
 import { useWorkspaceScope } from '@/hooks/use-workspace-scope'
@@ -89,6 +90,12 @@ export function Topbar({ collapsed = false, onToggleSidebar, userName = 'Usuario
           <Button variant="secondary" onClick={() => void logout()}>
             Sair
           </Button>
+          <a href={QA_ORBIT_INSTRUCTOR_GPT_URL} target="_blank" rel="noreferrer noopener">
+            <Button variant="secondary">
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Instrutor QA Orbit
+            </Button>
+          </a>
           <Link to="/analysis/new">
             <Button>
               <Sparkles className="mr-2 h-4 w-4" />

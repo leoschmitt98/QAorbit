@@ -1,17 +1,20 @@
 import { useState, type ReactNode } from 'react'
 import { FileText, Paperclip, Trash2, Upload } from 'lucide-react'
 import type { PortalArea, ProductType, TicketContext, TicketOrigin } from '@/types/domain'
-import type { CatalogModulo, CatalogOption } from '@/services/catalog-api'
+import type { CatalogModulo, CatalogOption, CatalogProjectPortal } from '@/services/catalog-api'
 import { Card } from '@/components/ui/card'
 
 interface TicketContextFormProps {
   value: TicketContext
+  analysisMode?: 'ticket' | 'homologation'
   projects: CatalogOption[]
   modules: CatalogModulo[]
   areas: CatalogOption[]
+  testLocations?: CatalogProjectPortal[]
   projectsLoading: boolean
   modulesLoading: boolean
   areasLoading: boolean
+  testLocationsLoading?: boolean
   errorMessage?: string | null
   importMessage?: string | null
   importTextMessage?: string | null
@@ -43,12 +46,15 @@ function moduleMatchesTestLocation(module: CatalogModulo, testLocation: string) 
 
 export function TicketContextForm({
   value,
+  analysisMode = 'ticket',
   projects,
   modules,
   areas,
+  testLocations = [],
   projectsLoading,
   modulesLoading,
   areasLoading,
+  testLocationsLoading = false,
   errorMessage,
   importMessage,
   importTextMessage,
@@ -57,6 +63,8 @@ export function TicketContextForm({
   onChange,
 }: TicketContextFormProps) {
   const [clipboardText, setClipboardText] = useState('')
+  const isHomologation = analysisMode === 'homologation'
+  const locationOptions = testLocations.length > 0 ? testLocations : areas
   const availableModules = modules.filter(
     (item) => item.projetoId === value.projectId && moduleMatchesTestLocation(item, value.portalArea),
   )
@@ -93,13 +101,17 @@ export function TicketContextForm({
     <Card className="space-y-8">
       <div>
         <p className="text-sm text-muted">Etapa 1</p>
-        <h3 className="font-display text-2xl font-bold text-foreground">Contexto do chamado</h3>
+        <h3 className="font-display text-2xl font-bold text-foreground">{isHomologation ? 'Contexto da validacao' : 'Contexto do chamado'}</h3>
         {errorMessage ? <p className="mt-2 text-sm text-muted">{errorMessage}</p> : null}
       </div>
 
       <SectionBlock
-        title="Importacao rapida do chamado"
-        description="Cole aqui o texto do card ou work item vindo do Azure para o sistema tentar preencher automaticamente os campos principais."
+        title={isHomologation ? 'Importacao rapida opcional' : 'Importacao rapida do chamado'}
+        description={
+          isHomologation
+            ? 'Se existir um card, checklist ou escopo de homologacao, cole aqui para tentar preencher automaticamente os campos principais.'
+            : 'Cole aqui o texto do card ou work item vindo do Azure para o sistema tentar preencher automaticamente os campos principais.'
+        }
       >
         <TextAreaField
           label="Conteudo copiado do chamado"
@@ -130,15 +142,19 @@ export function TicketContextForm({
       </SectionBlock>
 
       <SectionBlock
-        title="Identificacao"
-        description="Registre o chamado exatamente como ele chega do suporte ou do cliente."
+        title={isHomologation ? 'Identificacao da bateria de testes' : 'Identificacao'}
+        description={
+          isHomologation
+            ? 'Registre um identificador interno e o objetivo da validacao. Nao e necessario existir relato de cliente.'
+            : 'Registre o chamado exatamente como ele chega do suporte ou do cliente.'
+        }
       >
         <div className="grid gap-4 xl:grid-cols-2">
-          <InputField label="ID do chamado" value={value.ticketId} onChange={(nextValue) => update('ticketId', nextValue)} />
-          <InputField label="Titulo" value={value.title} onChange={(nextValue) => update('title', nextValue)} />
+          <InputField label={isHomologation ? 'ID interno da validacao' : 'ID do chamado'} value={value.ticketId} onChange={(nextValue) => update('ticketId', nextValue)} />
+          <InputField label={isHomologation ? 'Titulo da bateria / fluxo' : 'Titulo'} value={value.title} onChange={(nextValue) => update('title', nextValue)} />
         </div>
         <TextAreaField
-          label="Descricao do problema (relato do cliente)"
+          label={isHomologation ? 'Objetivo / escopo da homologacao' : 'Descricao do problema (relato do cliente)'}
           value={value.customerProblemDescription}
           onChange={(nextValue) => update('customerProblemDescription', nextValue)}
         />
@@ -166,8 +182,8 @@ export function TicketContextForm({
             label="Local de teste"
             value={value.portalArea}
             onChange={(nextValue) => update('portalArea', nextValue as PortalArea)}
-            options={areas.map((item) => ({ value: item.nome, label: item.nome }))}
-            loading={areasLoading}
+            options={locationOptions.map((item) => ({ value: item.nome, label: item.nome }))}
+            loading={areasLoading || testLocationsLoading}
           />
           <SelectField
             label="Modulo principal"
@@ -181,13 +197,13 @@ export function TicketContextForm({
 
       <SectionBlock
         title="Execucao"
-        description="Defina o recorte tecnico da validacao antes de partir para a analise detalhada."
+        description={isHomologation ? 'Defina ambiente, versao e origem da bateria de testes.' : 'Defina o recorte tecnico da validacao antes de partir para a analise detalhada.'}
       >
         <div className="grid gap-4 xl:grid-cols-3">
           <InputField label="Ambiente" value={value.environment} onChange={(nextValue) => update('environment', nextValue)} />
           <InputField label="Versao / hotfix" value={value.version} onChange={(nextValue) => update('version', nextValue)} />
           <SelectField
-            label="Origem do chamado"
+            label={isHomologation ? 'Origem da validacao' : 'Origem do chamado'}
             value={value.origin}
             onChange={(nextValue) => update('origin', nextValue as TicketOrigin)}
             options={origins.map((item) => ({ value: item, label: item }))}

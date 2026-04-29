@@ -1,0 +1,14 @@
+{
+  "projectKey": "sheila",
+  "projectName": "Sheila",
+  "suites": [
+    {
+      "id": "login-admin",
+      "name": "Login senha valida",
+      "spec": "cypress/e2e/orbit/login-admin.cy.js",
+      "description": "Executa o blueprint de login admin exportado pelo Smart Recorder.",
+      "requiredParams": ["baseUrl", "password"],
+      "tags": ["smoke", "login", "smart-recorder"]
+    }
+  ]
+}
