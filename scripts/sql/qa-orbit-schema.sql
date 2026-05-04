@@ -851,6 +851,69 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('dbo.AutomationRuns', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.AutomationRuns (
+    Id NVARCHAR(120) NOT NULL PRIMARY KEY,
+    Name NVARCHAR(250) NOT NULL,
+    Type NVARCHAR(40) NOT NULL,
+    Framework NVARCHAR(40) NOT NULL,
+    BaseUrl NVARCHAR(1000) NULL,
+    Status NVARCHAR(40) NOT NULL,
+    StartedAt DATETIME2(0) NOT NULL,
+    FinishedAt DATETIME2(0) NOT NULL,
+    DurationMs INT NOT NULL CONSTRAINT DF_AutomationRuns_DurationMs DEFAULT (0),
+    Total INT NOT NULL CONSTRAINT DF_AutomationRuns_Total DEFAULT (0),
+    Passed INT NOT NULL CONSTRAINT DF_AutomationRuns_Passed DEFAULT (0),
+    Failed INT NOT NULL CONSTRAINT DF_AutomationRuns_Failed DEFAULT (0),
+    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_AutomationRuns_CreatedAt DEFAULT (SYSDATETIME())
+  );
+
+  CREATE INDEX IX_AutomationRuns_CreatedAt ON dbo.AutomationRuns (CreatedAt DESC);
+  CREATE INDEX IX_AutomationRuns_Framework_Status ON dbo.AutomationRuns (Framework, Status);
+END
+GO
+
+IF OBJECT_ID('dbo.AutomationRunItems', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.AutomationRunItems (
+    Id NVARCHAR(120) NOT NULL PRIMARY KEY,
+    RunId NVARCHAR(120) NOT NULL,
+    SpecName NVARCHAR(250) NULL,
+    SpecPath NVARCHAR(1000) NULL,
+    Framework NVARCHAR(40) NOT NULL,
+    Status NVARCHAR(40) NOT NULL,
+    ExitCode INT NOT NULL CONSTRAINT DF_AutomationRunItems_ExitCode DEFAULT (0),
+    DurationMs INT NOT NULL CONSTRAINT DF_AutomationRunItems_DurationMs DEFAULT (0),
+    MainError NVARCHAR(MAX) NULL,
+    StdoutSanitized NVARCHAR(MAX) NULL,
+    StderrSanitized NVARCHAR(MAX) NULL,
+    CommandText NVARCHAR(1000) NULL,
+    BaseUrl NVARCHAR(1000) NULL,
+    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_AutomationRunItems_CreatedAt DEFAULT (SYSDATETIME()),
+    CONSTRAINT FK_AutomationRunItems_Runs FOREIGN KEY (RunId) REFERENCES dbo.AutomationRuns (Id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IX_AutomationRunItems_RunId ON dbo.AutomationRunItems (RunId, CreatedAt);
+  CREATE INDEX IX_AutomationRunItems_Status ON dbo.AutomationRunItems (Status);
+END
+GO
+
+IF OBJECT_ID('dbo.AutomationArtifacts', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.AutomationArtifacts (
+    Id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    RunItemId NVARCHAR(120) NOT NULL,
+    Type NVARCHAR(40) NOT NULL,
+    Path NVARCHAR(1000) NOT NULL,
+    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_AutomationArtifacts_CreatedAt DEFAULT (SYSDATETIME()),
+    CONSTRAINT FK_AutomationArtifacts_RunItems FOREIGN KEY (RunItemId) REFERENCES dbo.AutomationRunItems (Id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IX_AutomationArtifacts_RunItemId ON dbo.AutomationArtifacts (RunItemId);
+END
+GO
+
 IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'App web')
   INSERT INTO dbo.Areas (Nome) VALUES ('App web');
 IF NOT EXISTS (SELECT 1 FROM dbo.Areas WHERE Nome = 'Checkout')

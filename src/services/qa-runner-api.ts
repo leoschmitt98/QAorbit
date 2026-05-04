@@ -42,6 +42,23 @@ export interface QaRunnerRunResult {
   error: string
 }
 
+export interface QaRunnerBatchRunItem extends QaRunnerRunResult {
+  suiteId: string
+  suiteName: string
+}
+
+export interface QaRunnerBatchRunResult {
+  ok: boolean
+  status: 'passed' | 'failed'
+  totalSuites: number
+  passedSuites: number
+  failedSuites: number
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  results: QaRunnerBatchRunItem[]
+}
+
 export interface QaRunnerDirectoryEntry {
   name: string
   path: string
@@ -160,6 +177,27 @@ export async function runQaRunnerSuite(payload: {
   })
 
   return parseJson<QaRunnerRunResult>(response)
+}
+
+export async function runQaRunnerSuites(payload: {
+  projectId: string
+  projectName: string
+  workspacePath: string
+  suites: Array<{ id: string; name: string; spec: string }>
+  baseUrl: string
+  username: string
+  password: string
+  extraEnv: Record<string, string>
+}) {
+  const response = await fetch('/api/qa-runner/run-batch', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  return parseJson<QaRunnerBatchRunResult>(response)
 }
 
 export function useQaRunnerWorkspacesQuery() {

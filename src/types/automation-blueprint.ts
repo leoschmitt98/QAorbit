@@ -53,6 +53,11 @@ export interface AutomationBlueprintStep extends AutomationStepElementContext, A
   notes: string
   imageUrl: string
   frameId: string
+  sourceStrategy: string
+  sourceRecommendedCommand: string
+  sourceFallbackSelector: string
+  sourceSelectorQuality: string
+  sourceWarning: string
 }
 
 export interface AutomationBlueprint {

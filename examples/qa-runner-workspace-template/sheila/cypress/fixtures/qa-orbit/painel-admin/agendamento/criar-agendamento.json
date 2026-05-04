@@ -1,0 +1,121 @@
+{
+  "name": "criar agendamento",
+  "startUrl": "https://cliente.exemplo.com.br/painel-admin",
+  "environment": "hml",
+  "steps": [
+    {
+      "order": 1,
+      "action": "type",
+      "target": {
+        "strategy": "css",
+        "selector": "[name='usuario']",
+        "recommendedCommand": "get"
+      },
+      "value": "{{usuario}}",
+      "variableName": "usuario",
+      "selectorQuality": "medium"
+    },
+    {
+      "order": 2,
+      "action": "type",
+      "target": {
+        "strategy": "css",
+        "selector": "[name='password']",
+        "recommendedCommand": "get"
+      },
+      "value": "{{password}}",
+      "variableName": "password",
+      "selectorQuality": "medium"
+    },
+    {
+      "order": 3,
+      "action": "click",
+      "target": {
+        "strategy": "text",
+        "selector": "button",
+        "text": "Entrar",
+        "recommendedCommand": "contains"
+      },
+      "selectorQuality": "medium"
+    },
+    {
+      "order": 4,
+      "action": "click",
+      "target": {
+        "strategy": "text",
+        "selector": "a",
+        "text": "Agendamentos",
+        "recommendedCommand": "contains"
+      },
+      "selectorQuality": "medium"
+    },
+    {
+      "order": 5,
+      "action": "click",
+      "target": {
+        "strategy": "text",
+        "selector": "button",
+        "text": "Novo agendamento",
+        "recommendedCommand": "contains"
+      },
+      "selectorQuality": "medium"
+    },
+    {
+      "order": 6,
+      "action": "type",
+      "target": {
+        "strategy": "css",
+        "selector": "[name='nomePaciente']",
+        "recommendedCommand": "get"
+      },
+      "value": "{{pacienteNome}}",
+      "variableName": "pacienteNome",
+      "selectorQuality": "strong"
+    },
+    {
+      "order": 7,
+      "action": "select",
+      "target": {
+        "strategy": "css",
+        "selector": "select[name='tipoAtendimento']",
+        "recommendedCommand": "get"
+      },
+      "value": "Retorno",
+      "selectorQuality": "strong"
+    },
+    {
+      "order": 8,
+      "action": "type",
+      "target": {
+        "strategy": "css",
+        "selector": "[name='dataAgendamento']",
+        "recommendedCommand": "get"
+      },
+      "value": "{{dataAgendamento}}",
+      "variableName": "dataAgendamento",
+      "selectorQuality": "strong"
+    },
+    {
+      "order": 9,
+      "action": "click",
+      "target": {
+        "strategy": "text",
+        "selector": "button",
+        "text": "Salvar",
+        "recommendedCommand": "contains"
+      },
+      "selectorQuality": "medium"
+    },
+    {
+      "order": 10,
+      "action": "assertVisible",
+      "target": {
+        "strategy": "text",
+        "selector": "body",
+        "text": "Agendamento salvo com sucesso",
+        "recommendedCommand": "contains"
+      },
+      "selectorQuality": "medium"
+    }
+  ]
+}

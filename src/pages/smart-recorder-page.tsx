@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { QuickTutorial } from '@/components/ui/quick-tutorial'
 import { SectionHeader } from '@/components/ui/section-header'
 import { useCatalogProjectsQuery } from '@/services/catalog-api'
 import {
@@ -22,6 +23,24 @@ import {
 } from '@/services/smart-recorder-api'
 
 const actions = ['click', 'type', 'select', 'check', 'uncheck', 'submit', 'assertVisible', 'assertText'] as const
+const quickSteps = [
+  {
+    title: 'Crie a sessao',
+    description: 'Defina projeto, nome do fluxo, URL inicial e ambiente antes de iniciar a captura.',
+  },
+  {
+    title: 'Cole o snippet',
+    description: 'Abra o sistema alvo, cole o snippet no DevTools e execute o fluxo manualmente.',
+  },
+  {
+    title: 'Revise os passos',
+    description: 'Ajuste seletores, expectedResult e variaveis sensiveis antes de exportar.',
+  },
+  {
+    title: 'Exporte o JSON',
+    description: 'Leve o blueprint para o Automation Builder ou para outra IA gerar o teste automatizado.',
+  },
+]
 
 function normalizeText(value: unknown, limit = 120) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit)
@@ -368,6 +387,12 @@ export function SmartRecorderPage() {
   const localBlueprint = useMemo(() => buildLocalBlueprint(session), [session])
   const jsonPreview = useMemo(() => JSON.stringify(exportData?.blueprint ?? localBlueprint, null, 2), [exportData, localBlueprint])
   const promptPreview = exportData?.prompt || 'Finalize ou exporte a sessao para gerar o prompt completo.'
+  const currentTutorialStep = useMemo(() => {
+    if (exportData) return 3
+    if (session?.steps.length) return 2
+    if (session?.status === 'recording' || session?.status === 'paused') return 1
+    return 0
+  }, [exportData, session])
 
   async function refreshSession() {
     if (!session?.id) return
@@ -496,6 +521,13 @@ export function SmartRecorderPage() {
         eyebrow="Automacao"
         title="Smart Recorder"
         description="Grave interacoes manuais e transforme o fluxo em um blueprint tecnico para automacao Cypress futura."
+      />
+
+      <QuickTutorial
+        title="Como usar esta aba"
+        description="O Smart Recorder e o caminho mais rapido para capturar um fluxo real e transformalo em JSON tecnico reutilizavel."
+        steps={quickSteps}
+        currentStep={currentTutorialStep}
       />
 
       <section className="space-y-6">

@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { QuickTutorial } from '@/components/ui/quick-tutorial'
 import { StatusBadge } from '@/components/ui/status-badge'
 import type { AutomationActionType, AutomationBlueprint, AutomationBlueprintStep } from '@/types/automation-blueprint'
 import { downloadBlueprintDocx, downloadBlueprintJson, downloadBlueprintMarkdown } from '@/utils/automation-blueprint-export'
@@ -25,6 +26,24 @@ const actionOptions: Array<{ value: AutomationActionType; label: string }> = [
 ]
 
 const STORAGE_KEY = 'qa-orbit-automation-blueprint-draft'
+const quickSteps = [
+  {
+    title: 'Defina o contexto',
+    description: 'Preencha fluxo, sistema, modulo, objetivo e pre-condicoes do roteiro tecnico.',
+  },
+  {
+    title: 'Monte os passos',
+    description: 'Adicione um passo por acao, usando seletor manual ou HTML vindo do DevTools.',
+  },
+  {
+    title: 'Revise a automacao',
+    description: 'Cheque suggestedSelector, cypressLine e alertas de revisao manual antes de exportar.',
+  },
+  {
+    title: 'Exporte o material',
+    description: 'Baixe JSON, DOCX ou Markdown e leve o fluxo para o Automation Builder.',
+  },
+]
 
 interface SmartRecorderBlueprintStep {
   order?: number
@@ -70,6 +89,59 @@ function isFriendlyElementType(value: string) {
   )
 }
 
+function isPlaceholderRecorderText(value: string) {
+  return /^passo\s+\d+$/i.test(String(value || '').trim())
+}
+
+function mapRecorderQualityToConfidence(quality: string | undefined) {
+  const normalized = String(quality || '').toLowerCase()
+  if (normalized === 'strong') return 'alta'
+  if (normalized === 'medium') return 'media'
+  if (normalized === 'weak') return 'baixa'
+  return 'media'
+}
+
+function buildContainsExpression(selector: string, text: string) {
+  const safeSelector = String(selector || 'body').replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+  const safeText = String(text || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+  return `cy.contains('${safeSelector}', '${safeText}')`
+}
+
+function buildImportedRecorderSelectors(step: SmartRecorderBlueprintStep) {
+  const target = step.target || {}
+  const recommendedCommand = String(target.recommendedCommand || '')
+  const selector = String(target.selector || '')
+  const text = String(target.text || '')
+  const fallbackSelector = String(target.fallbackSelector || '')
+  const hasGenericTextAnchor = recommendedCommand === 'contains' && selector === 'body' && isPlaceholderRecorderText(text)
+
+  if (recommendedCommand === 'get' && selector) {
+    return {
+      manualSelector: selector,
+      manualAlternativeSelector: fallbackSelector,
+    }
+  }
+
+  if (recommendedCommand === 'contains' && selector && text) {
+    if (hasGenericTextAnchor && fallbackSelector) {
+      return {
+        manualSelector: fallbackSelector,
+        manualAlternativeSelector: buildContainsExpression(selector, text),
+      }
+    }
+
+    return {
+      manualSelector: buildContainsExpression(selector, text),
+      manualAlternativeSelector: fallbackSelector,
+    }
+  }
+
+  return {
+    manualSelector: selector || fallbackSelector,
+    manualAlternativeSelector: selector && fallbackSelector && selector !== fallbackSelector ? fallbackSelector : '',
+  }
+}
+
 function createHydratedStep(step: Partial<AutomationBlueprintStep> & Pick<AutomationBlueprintStep, 'id' | 'order'>): AutomationBlueprintStep {
   const baseStep: AutomationBlueprintStep = {
     id: step.id,
@@ -92,6 +164,11 @@ function createHydratedStep(step: Partial<AutomationBlueprintStep> & Pick<Automa
     notes: step.notes || '',
     imageUrl: step.imageUrl || '',
     frameId: step.frameId || '',
+    sourceStrategy: step.sourceStrategy || '',
+    sourceRecommendedCommand: step.sourceRecommendedCommand || '',
+    sourceFallbackSelector: step.sourceFallbackSelector || '',
+    sourceSelectorQuality: step.sourceSelectorQuality || '',
+    sourceWarning: step.sourceWarning || '',
     suggestedSelector: '',
     alternativeSelector: '',
     selectorConfidence: 'revisao_manual',
@@ -128,18 +205,33 @@ function createHydratedStep(step: Partial<AutomationBlueprintStep> & Pick<Automa
   const preferredSelector = mergedStep.manualSelector || suggestion.suggestedSelector || suggestion.alternativeSelector
   const fallbackSelector = mergedStep.manualAlternativeSelector || suggestion.alternativeSelector
   const hasManualSelector = Boolean(mergedStep.manualSelector)
+  const importedRecorderConfidence = mapRecorderQualityToConfidence(mergedStep.sourceSelectorQuality)
+  const confidence = hasManualSelector
+    ? mergedStep.sourceSelectorQuality
+      ? importedRecorderConfidence
+      : 'alta'
+    : suggestion.selectorConfidence
+  const manualReason = mergedStep.sourceRecommendedCommand || mergedStep.sourceStrategy
+    ? [
+        'Seletor importado do Smart Recorder.',
+        mergedStep.sourceStrategy ? `Estrategia: ${mergedStep.sourceStrategy}.` : '',
+        mergedStep.sourceRecommendedCommand ? `Comando: ${mergedStep.sourceRecommendedCommand}.` : '',
+        mergedStep.sourceSelectorQuality ? `Qualidade original: ${mergedStep.sourceSelectorQuality}.` : '',
+      ].filter(Boolean).join(' ')
+    : 'Seletor principal informado manualmente pelo QA com base no DevTools.'
+  const needsManualReview = hasManualSelector
+    ? confidence === 'baixa' || confidence === 'revisao_manual'
+    : suggestion.needsManualReview
 
   return {
     ...mergedStep,
     ...suggestion,
     suggestedSelector: preferredSelector,
     alternativeSelector: fallbackSelector,
-    selectorConfidence: hasManualSelector ? 'alta' : suggestion.selectorConfidence,
-    selectorReason: hasManualSelector
-      ? 'Seletor principal informado manualmente pelo QA com base no DevTools.'
-      : suggestion.selectorReason,
+    selectorConfidence: confidence,
+    selectorReason: hasManualSelector ? manualReason : suggestion.selectorReason,
     cypressLine: buildCypressLine(mergedStep.action, preferredSelector, mergedStep.typedValue, mergedStep.expectedStepResult),
-    needsManualReview: hasManualSelector ? false : suggestion.needsManualReview,
+    needsManualReview,
   }
 }
 
@@ -231,13 +323,7 @@ function mapSmartRecorderAction(action: string | undefined): AutomationActionTyp
 }
 
 function buildSmartRecorderSelector(step: SmartRecorderBlueprintStep) {
-  const target = step.target || {}
-  if (target.recommendedCommand === 'contains' && target.selector && target.text) {
-    const safeText = String(target.text).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
-    return `cy.contains('${target.selector}', '${safeText}')`
-  }
-
-  return target.selector || ''
+  return buildImportedRecorderSelectors(step).manualSelector
 }
 
 function smartRecorderStepTitle(step: SmartRecorderBlueprintStep) {
@@ -254,8 +340,9 @@ function smartRecorderToAutomationBlueprint(source: SmartRecorderBlueprint): Aut
     .map((step, index) => {
       const target = step.target || {}
       const action = mapSmartRecorderAction(step.action)
+      const importedSelectors = buildImportedRecorderSelectors(step)
       const selector = buildSmartRecorderSelector(step)
-      const visibleText = target.text || ''
+      const visibleText = isPlaceholderRecorderText(target.text || '') ? '' : target.text || ''
       const notes = [
         'Importado do Smart Recorder.',
         step.selectorQuality ? `Qualidade do seletor: ${step.selectorQuality}.` : '',
@@ -277,11 +364,16 @@ function smartRecorderToAutomationBlueprint(source: SmartRecorderBlueprint): Aut
         elementClasses: [],
         elementName: '',
         dataTestId: target.selector?.match(/\[data-testid=['"]([^'"]+)['"]]/)?.[1] || '',
-        manualSelector: selector,
-        manualAlternativeSelector: target.fallbackSelector || '',
+        manualSelector: importedSelectors.manualSelector || selector,
+        manualAlternativeSelector: importedSelectors.manualAlternativeSelector || '',
         typedValue: step.value || '',
         expectedStepResult: step.expectedResult || '',
         notes,
+        sourceStrategy: target.strategy || '',
+        sourceRecommendedCommand: target.recommendedCommand || '',
+        sourceFallbackSelector: target.fallbackSelector || '',
+        sourceSelectorQuality: step.selectorQuality || '',
+        sourceWarning: step.warning || '',
       })
     })
 
@@ -329,6 +421,11 @@ export function AutomationBlueprintPage() {
   const [selectedStepId, setSelectedStepId] = useState<string>(() => initialBlueprintRef.current?.steps[0]?.id || '')
   const [saveStatus, setSaveStatus] = useState('Rascunho salvo neste navegador')
   const [pastedJson, setPastedJson] = useState('')
+  const currentTutorialStep = useMemo(() => {
+    if (blueprint.steps.length > 0) return 2
+    if (blueprint.flowName || blueprint.system || blueprint.module) return 1
+    return 0
+  }, [blueprint.flowName, blueprint.module, blueprint.steps.length, blueprint.system])
 
   useEffect(() => {
     try {
@@ -460,7 +557,7 @@ export function AutomationBlueprintPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+    <div className="flex w-full max-w-none flex-col gap-6 pb-16 pt-6">
       <SectionHeader
         eyebrow="Blueprint de Automacao"
         title="Fluxo manual para documentar a automacao"
@@ -489,6 +586,13 @@ export function AutomationBlueprintPage() {
             </Button>
           </div>
         }
+      />
+
+      <QuickTutorial
+        title="Como usar esta aba"
+        description="Esse fluxo e ideal quando o QA quer enriquecer manualmente o passo a passo com contexto tecnico antes da geracao automatizada."
+        steps={quickSteps}
+        currentStep={currentTutorialStep}
       />
 
       <input
@@ -533,7 +637,7 @@ export function AutomationBlueprintPage() {
         />
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_minmax(420px,0.82fr)] 2xl:grid-cols-[minmax(0,1.25fr)_minmax(460px,0.75fr)]">
         <Card className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Nome do fluxo">
@@ -736,6 +840,18 @@ export function AutomationBlueprintPage() {
                       onChange={(event) => updateStep(selectedStep.id, (current) => ({ ...current, expectedStepResult: event.target.value }))}
                     />
                   </Field>
+                  <Field label="Estrategia vinda do Recorder">
+                    <Input value={selectedStep.sourceStrategy} readOnly />
+                  </Field>
+                  <Field label="Comando vindo do Recorder">
+                    <Input value={selectedStep.sourceRecommendedCommand} readOnly />
+                  </Field>
+                  <Field label="Qualidade original do seletor">
+                    <Input value={selectedStep.sourceSelectorQuality} readOnly />
+                  </Field>
+                  <Field label="Fallback vindo do Recorder">
+                    <Input value={selectedStep.sourceFallbackSelector} readOnly />
+                  </Field>
                 </div>
 
                 <Field label="HTML de referencia">
@@ -755,6 +871,13 @@ export function AutomationBlueprintPage() {
                     placeholder="Descreva o contexto do clique, cuidado com seletor dinamico e o que a IA precisa observar."
                   />
                 </Field>
+
+                {selectedStep.sourceWarning ? (
+                  <div className="rounded-2xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                    <p className="font-semibold">Alerta importado do Smart Recorder</p>
+                    <p className="mt-1 text-amber-100/90">{selectedStep.sourceWarning}</p>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="rounded-2xl border border-border bg-white/[0.02] p-4 text-sm text-muted">

@@ -344,6 +344,314 @@ Para aplicar em um banco existente, rode novamente:
 sqlcmd -S 127.0.0.1,1434 -d QA_Orbit -U qaorbit_user -P "TroqueEstaSenhaForteAqui123!" -C -i scripts/sql/qa-orbit-schema.sql
 ```
 
+## Automation Builder / Automacao Visual
+
+A aba Automation Builder e a evolucao gradual do Cypress Builder. A rota antiga continua ativa em:
+
+```text
+/automation/cypress-builder
+```
+
+A nova rota recomendada e:
+
+```text
+/automation/automation-builder
+```
+
+O objetivo e trabalhar com um blueprint neutro e gerar/rodar automacoes em multiplos frameworks.
+
+Frameworks iniciais:
+
+- Cypress
+- Playwright
+- Selenium
+
+Engines planejados:
+
+- API
+- Performance/k6
+- Security/OWASP ZAP
+
+### Conceitos
+
+Blueprint e o JSON neutro que descreve o fluxo de teste. Ele nao deve depender de Cypress, Playwright ou Selenium.
+
+Generator e a camada que transforma o mesmo blueprint em codigo para um framework especifico.
+
+Runner e o motor de execucao. Ele recebe framework, comando, pasta do workspace, spec, baseUrl e env, executa com protecoes e retorna um resultado padronizado.
+
+Battery e uma bateria de testes. Ela executa multiplos specs ou comandos em sequencia e consolida o resultado.
+
+### Blueprint neutro
+
+Formato base:
+
+```json
+{
+  "name": "login admin",
+  "type": "web-e2e",
+  "framework": "cypress",
+  "language": "javascript",
+  "pattern": "simple",
+  "baseUrl": "https://hml.exemplo.com.br",
+  "specName": "login-admin.cy.js",
+  "steps": [
+    {
+      "action": "click",
+      "targetName": "Admin",
+      "selector": "button",
+      "value": "",
+      "expected": "",
+      "notes": ""
+    },
+    {
+      "action": "fill",
+      "targetName": "Senha",
+      "selector": "input[type='password']",
+      "value": "{{password}}",
+      "expected": "",
+      "notes": "Valor vindo de env"
+    }
+  ]
+}
+```
+
+Tipos preparados:
+
+- `web-e2e`: ativo nesta etapa
+- `api`: preparado para proxima etapa
+- `performance`: preparado para proxima etapa
+- `security`: preparado para proxima etapa
+
+Padroes preparados:
+
+- `simple`: ativo nesta etapa
+- `pageObject`: preparado
+- `gherkin`: preparado
+
+### Geracao de codigo
+
+Pelo Automation Builder:
+
+1. cole ou importe o blueprint JSON;
+2. escolha tipo `Web E2E`;
+3. escolha framework, linguagem e padrao;
+4. informe Base URL e nome da spec;
+5. clique em `Gerar codigo`;
+6. copie a spec gerada para o workspace externo.
+
+Para Cypress, o generator preserva o modo atual `runner_based`:
+
+- gera fixture JSON;
+- gera spec Cypress;
+- usa `runQaOrbitBlueprint`;
+- mantem compatibilidade com o template `examples/cypress-qa-orbit-runner`.
+
+Para Playwright, o generator inicial gera uma spec simples em TypeScript usando `@playwright/test`.
+
+Para Selenium, o generator inicial gera uma spec simples em JavaScript usando `selenium-webdriver`.
+
+### Execucao
+
+Rotas REST novas:
+
+```text
+POST /api/automation/generate
+POST /api/automation/run
+POST /api/automation/failure-context
+POST /api/automation/batteries/run
+GET /api/automation/runs
+GET /api/automation/runs/:id
+GET /api/automation/runs/:id/items
+GET /api/automation/runs/:id/failure-context
+```
+
+A execucao recebe:
+
+```json
+{
+  "framework": "cypress",
+  "workingDir": "C:/projetos/qarunner-cypress",
+  "specPath": "cypress/e2e/qa-orbit/login-admin.cy.js",
+  "baseUrl": "https://hml.exemplo.com.br",
+  "env": {
+    "password": "minhaSenha"
+  }
+}
+```
+
+Resultado padronizado:
+
+```json
+{
+  "status": "passed",
+  "framework": "cypress",
+  "command": "npx cypress run --spec cypress/e2e/qa-orbit/login-admin.cy.js",
+  "workingDir": "C:/projetos/qarunner-cypress",
+  "exitCode": 0,
+  "durationMs": 12345,
+  "stdout": "",
+  "stderr": "",
+  "artifacts": {
+    "screenshots": [],
+    "videos": [],
+    "traces": [],
+    "reports": []
+  },
+  "summary": {},
+  "mainError": "",
+  "warnings": []
+}
+```
+
+### Comandos padrao
+
+Cypress:
+
+```bash
+npx cypress run
+npx cypress run --spec "cypress/e2e/qa-orbit/login-admin.cy.js"
+```
+
+Playwright:
+
+```bash
+npx playwright test --reporter=json
+npx playwright test "tests/qa-orbit/login-admin.spec.ts" --reporter=json
+```
+
+Selenium:
+
+```bash
+npm test
+```
+
+Para Selenium, o QA Orbit permite comando customizado simples dentro da allowlist, como `npm test`, `npm run test:e2e` ou `node tests/login.test.js`.
+
+### Segurança da execução
+
+O Automation Runner bloqueia comandos com padroes perigosos, incluindo:
+
+- `rm -rf`
+- `del /s`
+- `format`
+- `shutdown`
+- `powershell`
+- `curl | sh`
+- `wget | sh`
+- `&&`
+- `;`
+- `|`
+
+Por padrao, `workingDir` precisa estar dentro de uma pasta segura. Para liberar workspaces externos, configure no `.env`:
+
+```env
+QA_ORBIT_AUTOMATION_WORKSPACE_ROOT=C:\projetos
+```
+
+Logs retornados e usados na Correcao Assistida sao sanitizados para mascarar:
+
+- password
+- senha
+- token
+- authorization
+- cookie
+- email
+- login
+- username
+
+Placeholders como `{{usuario}}`, `{{senha}}` e `{{password}}` sao preservados.
+
+### Baterias de teste
+
+Modelo de bateria:
+
+```json
+{
+  "name": "Smoke web",
+  "framework": "playwright",
+  "baseUrl": "https://hml.exemplo.com.br",
+  "workingDir": "C:/projetos/automation",
+  "items": [
+    {
+      "name": "Login admin",
+      "specPath": "tests/qa-orbit/login-admin.spec.ts"
+    },
+    {
+      "name": "Cadastro basico",
+      "specPath": "tests/qa-orbit/cadastro-basico.spec.ts"
+    }
+  ]
+}
+```
+
+O resultado da bateria informa `passed`, `failed`, `partial` ou `error`, alem dos resultados individuais.
+
+### Historico de execucoes
+
+Toda execucao feita pelo Automation Builder e salva automaticamente no banco, tanto execucoes individuais quanto baterias.
+
+Tabelas usadas:
+
+- `AutomationRuns`
+- `AutomationRunItems`
+- `AutomationArtifacts`
+
+O historico guarda:
+
+- nome da execucao;
+- tipo `single` ou `battery`;
+- framework;
+- baseUrl;
+- status;
+- inicio, fim e duracao;
+- total, passou e falhou;
+- specs executadas;
+- stdout/stderr sanitizados;
+- erro principal;
+- artifacts encontrados, como screenshots, videos, traces e reports.
+
+Na tela Automation Builder, use a secao `Historico de Execucoes` para:
+
+1. ver as ultimas execucoes;
+2. abrir detalhes de uma execucao antiga;
+3. comparar erro principal e specs;
+4. gerar Correcao Assistida a partir de uma falha antiga sem colar stdout/stderr novamente.
+
+O endpoint:
+
+```text
+GET /api/automation/runs/:id/failure-context
+```
+
+usa os logs sanitizados salvos em `AutomationRunItems` e monta o contexto para o Assistente QA Orbit.
+
+O QA Orbit nao salva logs brutos neste historico. Antes de persistir, stdout e stderr passam pela mesma sanitizacao usada no resultado padronizado.
+
+### Limitacoes conhecidas
+
+- `web-e2e` e o unico tipo com generator ativo nesta etapa.
+- Playwright e Selenium geram specs simples; Page Object e Gherkin ficam para uma fase futura.
+- Selenium nao tenta adivinhar estrutura do projeto. Use `npm test` ou um comando permitido.
+- O runner executa specs existentes, mas ainda nao escreve arquivos automaticamente no workspace externo.
+
+## Correcao Assistida por IA
+
+O QA Orbit tambem pode montar um contexto estruturado de falha para Cypress, Playwright ou Selenium, ajudando na analise com o Assistente QA Orbit.
+
+Nesta fase o sistema:
+
+- nao chama IA diretamente;
+- nao envia dados para API externa;
+- apenas sanitiza os logs e gera um contexto pronto para copiar.
+
+O fluxo recomendado e:
+
+1. colar stdout, stderr, exit code, baseUrl, framework e spec na secao de Correcao Assistida do Automation Builder;
+2. gerar o contexto de correcao;
+3. copiar o texto final;
+4. colar no Assistente QA Orbit para receber sugestoes de ajuste com seguranca.
+
 ## QA Runner
 
 A aba QA Runner permite apontar um workspace Cypress externo e executar suites por projeto.

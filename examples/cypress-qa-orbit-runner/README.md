@@ -1,6 +1,6 @@
 # QA Orbit Cypress Blueprint Runner
 
-Template externo para executar um blueprint exportado pelo Smart Recorder.
+Template externo para executar um blueprint exportado pelo Smart Recorder ou gerado pelo Automation Builder em modo Cypress.
 
 Esta pasta ja esta estruturada como um projeto Cypress copiavel.
 
@@ -32,7 +32,7 @@ npm run cy:run
 npm run test:login-admin -- --env password="sua-senha"
 ```
 
-Pelo QA Runner, informe:
+Pelo QA Runner ou Automation Builder, informe:
 
 - Caminho do workspace: esta pasta copiada;
 - Suite: `Login senha valida`;
@@ -81,3 +81,14 @@ describe('QA Orbit - Login admin', () => {
 ```
 
 Ele nao deve ser colocado dentro do QA Orbit. A ideia e manter o QA Orbit como gerador do blueprint e o projeto Cypress como executor.
+
+## Relacao com o Automation Builder
+
+O Automation Builder gera codigo para Cypress, Playwright e Selenium. Este template continua sendo o caminho recomendado para Cypress porque ja traz:
+
+- `runQaOrbitBlueprint`;
+- fixture em `cypress/fixtures/qa-orbit`;
+- specs em `cypress/e2e/orbit`;
+- scripts `cy:open` e `cy:run`.
+
+Para Playwright e Selenium, use a spec gerada pelo Automation Builder em um workspace proprio desses frameworks.

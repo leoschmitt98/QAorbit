@@ -17,6 +17,10 @@ function escapeContainsText(value: string) {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 }
 
+function quoteJs(value: string) {
+  return JSON.stringify(String(value || ''))
+}
+
 export function looksDynamicId(id: string) {
   const normalized = normalizeText(id).toLowerCase()
   if (!normalized) return false
@@ -78,7 +82,7 @@ function buildSelectorByText(elementType: string, visibleText: string) {
 function selectorToGetExpression(selector: string) {
   if (!selector) return ''
   if (selector.startsWith('cy.')) return selector
-  return `cy.get('${selector}')`
+  return `cy.get(${quoteJs(selector)})`
 }
 
 export function buildCypressLine(
@@ -93,18 +97,21 @@ export function buildCypressLine(
   }
 
   if (action === 'click') return `${base}.click();`
-  if (action === 'type') return `${base}.type('${escapeContainsText(typedValue || '')}');`
-  if (action === 'select') return `${base}.select('${escapeContainsText(typedValue || '')}');`
+  if (action === 'type') return `${base}.type(${quoteJs(typedValue || '')});`
+  if (action === 'select') return `${base}.select(${quoteJs(typedValue || '')});`
   if (action === 'check') return `${base}.check();`
   if (action === 'uncheck') return `${base}.uncheck();`
   if (action === 'radio') return `${base}.check();`
   if (action === 'submit') return `${base}.submit();`
   if (action === 'wait') return `cy.wait(${Number(typedValue || 1000)});`
-  if (action === 'navigate') return `cy.visit('${escapeContainsText(typedValue || '')}');`
+  if (action === 'navigate') return `cy.visit(${quoteJs(typedValue || '')});`
   if (action === 'validate') {
     const expected = normalizeText(expectedStepResult) || normalizeText(typedValue)
+    if (selector.startsWith('cy.contains(')) {
+      return `${base}.should('be.visible');`
+    }
     if (expected) {
-      return `cy.contains('${escapeContainsText(expected)}').should('be.visible');`
+      return `cy.contains(${quoteJs(expected)}).should('be.visible');`
     }
     return `${base}.should('be.visible');`
   }

@@ -6,6 +6,8 @@ import areasRouter from './routes/areas.js'
 import authRouter from './routes/auth.js'
 import bugsRouter from './routes/bugs.js'
 import chamadosRouter from './routes/chamados.js'
+import automationBuilderRouter from './automation/routes/automation-builder-routes.js'
+import cypressBuilderRouter from './routes/cypress-builder.js'
 import demandasRouter from './routes/demandas.js'
 import documentosFuncionaisRouter from './routes/documentos-funcionais.js'
 import evidenciasRouter from './routes/evidencias.js'
@@ -19,6 +21,7 @@ import smartRecorderRouter, { handleSmartRecorderCapture } from './routes/smart-
 import testPlansRouter from './routes/test-plans.js'
 import { closePool } from './db.js'
 import { ensureAuthSchemaAndBootstrap, requireAuth } from './lib/auth.js'
+import { ensureAutomationRunsSchema } from './automation/runner/automation-runs-store.js'
 
 const app = express()
 const port = Number(process.env.API_PORT || 3001)
@@ -39,6 +42,8 @@ app.use('/storage', requireAuth, express.static(storageRoot))
 app.use('/api', requireAuth)
 
 app.use('/api/projetos', projetosRouter)
+app.use('/api/automation', automationBuilderRouter)
+app.use('/api/cypress-builder', cypressBuilderRouter)
 app.use('/api/qa-runner', qaRunnerRouter)
 app.use('/api/smart-recorder', smartRecorderRouter)
 app.use('/api/projeto-portais', projetoPortaisRouter)
@@ -54,6 +59,7 @@ app.use('/api/historico-testes', historicoTestesRouter)
 app.use('/api/quadros', quadrosRouter)
 
 ensureAuthSchemaAndBootstrap()
+  .then(() => ensureAutomationRunsSchema())
   .then(() => {
     app.listen(port, () => {
       console.log(`QA Orbit backend online at http://localhost:${port}`)

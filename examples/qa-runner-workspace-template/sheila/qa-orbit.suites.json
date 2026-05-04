@@ -1,0 +1,38 @@
+{
+  "projectKey": "sheila",
+  "projectName": "Sheila",
+  "suites": [
+    {
+      "id": "criar-agendamento",
+      "name": "Painel Admin - Criar agendamento",
+      "spec": "cypress/e2e/painel-admin/agendamento/criar-agendamento.cy.js",
+      "description": "Executa o fluxo base de criacao de agendamento no painel administrativo.",
+      "requiredParams": ["baseUrl", "usuario", "password", "pacienteNome", "dataAgendamento"],
+      "tags": ["painel-admin", "agendamento", "cadastro"]
+    },
+    {
+      "id": "editar-agendamento",
+      "name": "Painel Admin - Editar agendamento",
+      "spec": "cypress/e2e/painel-admin/agendamento/editar-agendamento.cy.js",
+      "description": "Executa o fluxo de edicao de um agendamento existente.",
+      "requiredParams": ["baseUrl", "usuario", "password", "pacienteNome", "novoHorario"],
+      "tags": ["painel-admin", "agendamento", "edicao"]
+    },
+    {
+      "id": "cancelar-agendamento",
+      "name": "Painel Admin - Cancelar agendamento",
+      "spec": "cypress/e2e/painel-admin/agendamento/cancelar-agendamento.cy.js",
+      "description": "Executa o fluxo de cancelamento de um agendamento com confirmacao.",
+      "requiredParams": ["baseUrl", "usuario", "password", "pacienteNome"],
+      "tags": ["painel-admin", "agendamento", "cancelamento"]
+    },
+    {
+      "id": "realizando-agendamento-de-servico-com-sucesso",
+      "name": "Painel Admin - Realizando agendamento de servico com sucesso",
+      "spec": "cypress/e2e/painel-admin/agendamento/realizando-agendamento-de-servico-com-sucesso.cy.js",
+      "description": "Executa o fluxo de agendamento de servico com sucesso exportado pelo QA Orbit.",
+      "requiredParams": ["baseUrl", "clientName", "phone"],
+      "tags": ["painel-admin", "agendamento", "smoke", "qa-orbit"]
+    }
+  ]
+}

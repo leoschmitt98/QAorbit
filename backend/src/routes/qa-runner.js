@@ -221,6 +221,88 @@ async function scanSuites(workspacePath) {
   }
 }
 
+async function executeSuiteRun({
+  workspacePath,
+  spec,
+  projectId,
+  projectName,
+  username,
+  password,
+  extraEnv,
+  baseUrl,
+}) {
+  const absoluteSpecPath = path.resolve(workspacePath, spec)
+
+  if (!spec || !isInsideDirectory(workspacePath, absoluteSpecPath)) {
+    const error = new Error('Spec Cypress invalida.')
+    error.statusCode = 400
+    throw error
+  }
+
+  const specStat = await fs.stat(absoluteSpecPath).catch(() => null)
+  if (!specStat?.isFile()) {
+    const error = new Error('Arquivo de spec nao encontrado no workspace informado.')
+    error.statusCode = 400
+    throw error
+  }
+
+  const envValues = {
+    QA_ORBIT_PROJECT_ID: String(projectId || ''),
+    QA_ORBIT_PROJECT_NAME: String(projectName || ''),
+    CYPRESS_username: String(username || ''),
+    CYPRESS_password: String(password || ''),
+    ...Object.fromEntries(
+      Object.entries(extraEnv || {}).map(([key, value]) => [`CYPRESS_${key}`, String(value ?? '')]),
+    ),
+  }
+
+  const cypressCommand = await resolveCypressCommand(workspacePath)
+  const args = [...cypressCommand.argsPrefix, 'run', '--spec', spec]
+  if (baseUrl) {
+    args.push('--config', `baseUrl=${String(baseUrl)}`)
+  }
+
+  const command = cypressCommand.command
+  const startedAt = new Date()
+  const child = spawn(command, args, {
+    cwd: workspacePath,
+    shell: process.platform === 'win32',
+    windowsHide: true,
+    env: buildSpawnEnv(envValues),
+  })
+
+  let stdout = ''
+  let stderr = ''
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk.toString()
+  })
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString()
+  })
+
+  const result = await new Promise((resolve) => {
+    child.on('close', (code) => resolve({ code: code ?? 1 }))
+    child.on('error', (error) => resolve({ code: 1, error }))
+  })
+
+  const finishedAt = new Date()
+
+  return {
+    ok: result.code === 0,
+    status: result.code === 0 ? 'passed' : 'failed',
+    exitCode: result.code,
+    command: `${command} ${args.join(' ')}`,
+    workspacePath,
+    spec,
+    startedAt: startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs: finishedAt.getTime() - startedAt.getTime(),
+    stdout,
+    stderr,
+    error: result.error instanceof Error ? result.error.message : '',
+  }
+}
+
 router.post('/suites', async (req, res) => {
   try {
     const workspacePath = await assertWorkspacePath(req.body?.workspacePath)
@@ -294,71 +376,71 @@ router.post('/run', async (req, res) => {
   try {
     const workspacePath = await assertWorkspacePath(req.body?.workspacePath)
     const spec = String(req.body?.spec || '').trim()
-    const absoluteSpecPath = path.resolve(workspacePath, spec)
 
-    if (!spec || !isInsideDirectory(workspacePath, absoluteSpecPath)) {
-      return res.status(400).json({ message: 'Spec Cypress invalida.' })
+    return res.json(
+      await executeSuiteRun({
+        workspacePath,
+        spec,
+        projectId: req.body?.projectId,
+        projectName: req.body?.projectName,
+        username: req.body?.username,
+        password: req.body?.password,
+        extraEnv: req.body?.extraEnv,
+        baseUrl: req.body?.baseUrl,
+      }),
+    )
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      message: error instanceof Error ? error.message : 'Nao foi possivel executar a suite Cypress.',
+    })
+  }
+})
+
+router.post('/run-batch', async (req, res) => {
+  try {
+    const workspacePath = await assertWorkspacePath(req.body?.workspacePath)
+    const suites = Array.isArray(req.body?.suites) ? req.body.suites : []
+
+    if (!suites.length) {
+      return res.status(400).json({ message: 'Selecione pelo menos uma suite para executar.' })
     }
 
-    const specStat = await fs.stat(absoluteSpecPath).catch(() => null)
-    if (!specStat?.isFile()) {
-      return res.status(400).json({ message: 'Arquivo de spec nao encontrado no workspace informado.' })
-    }
-
-    const envValues = {
-      QA_ORBIT_PROJECT_ID: String(req.body?.projectId || ''),
-      QA_ORBIT_PROJECT_NAME: String(req.body?.projectName || ''),
-      CYPRESS_username: String(req.body?.username || ''),
-      CYPRESS_password: String(req.body?.password || ''),
-      ...Object.fromEntries(
-        Object.entries(req.body?.extraEnv || {}).map(([key, value]) => [`CYPRESS_${key}`, String(value ?? '')]),
-      ),
-    }
-
-    const cypressCommand = await resolveCypressCommand(workspacePath)
-    const args = [...cypressCommand.argsPrefix, 'run', '--spec', spec]
-    if (req.body?.baseUrl) {
-      args.push('--config', `baseUrl=${String(req.body.baseUrl)}`)
-    }
-
-    const command = cypressCommand.command
     const startedAt = new Date()
-    const child = spawn(command, args, {
-      cwd: workspacePath,
-      shell: process.platform === 'win32',
-      windowsHide: true,
-      env: buildSpawnEnv(envValues),
-    })
+    const results = []
 
-    let stdout = ''
-    let stderr = ''
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString()
-    })
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString()
-    })
+    for (const suite of suites) {
+      const spec = String(suite?.spec || '').trim()
+      const runResult = await executeSuiteRun({
+        workspacePath,
+        spec,
+        projectId: req.body?.projectId,
+        projectName: req.body?.projectName,
+        username: req.body?.username,
+        password: req.body?.password,
+        extraEnv: req.body?.extraEnv,
+        baseUrl: req.body?.baseUrl,
+      })
 
-    const result = await new Promise((resolve) => {
-      child.on('close', (code) => resolve({ code: code ?? 1 }))
-      child.on('error', (error) => resolve({ code: 1, error }))
-    })
+      results.push({
+        suiteId: String(suite?.id || spec),
+        suiteName: String(suite?.name || spec),
+        ...runResult,
+      })
+    }
 
     const finishedAt = new Date()
+    const failedSuites = results.filter((result) => !result.ok).length
 
     return res.json({
-      ok: result.code === 0,
-      status: result.code === 0 ? 'passed' : 'failed',
-      exitCode: result.code,
-      command: `${command} ${args.join(' ')}`,
-      workspacePath,
-      spec,
+      ok: failedSuites === 0,
+      status: failedSuites === 0 ? 'passed' : 'failed',
+      totalSuites: results.length,
+      passedSuites: results.length - failedSuites,
+      failedSuites,
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
       durationMs: finishedAt.getTime() - startedAt.getTime(),
-      stdout,
-      stderr,
-      error: result.error instanceof Error ? result.error.message : '',
+      results,
     })
   } catch (error) {
     return res.status(error.statusCode || 500).json({

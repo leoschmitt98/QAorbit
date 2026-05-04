@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { BugDetailPage } from '@/pages/bug-detail-page'
 import { BugsPage } from '@/pages/bugs-page'
 import { CentralAgentsPage } from '@/pages/central-agents-page'
+import { CypressBuilderPage } from '@/pages/cypress-builder-page'
 import { DashboardPage } from '@/pages/dashboard-page'
 import { AutomationBlueprintPage } from '@/pages/automation-blueprint-page'
 import { DemandaDetailPage } from '@/pages/demanda-detail-page'
@@ -55,6 +56,8 @@ const router = createBrowserRouter([
       { path: 'agents', element: <CentralAgentsPage /> },
       { path: 'analysis/new', element: <NewAnalysisPage /> },
       { path: 'automation/blueprint', element: <AutomationBlueprintPage /> },
+      { path: 'automation/automation-builder', element: <CypressBuilderPage /> },
+      { path: 'automation/cypress-builder', element: <CypressBuilderPage /> },
       { path: 'automation/smart-recorder', element: <SmartRecorderPage /> },
       { path: 'automation/qa-runner', element: <QaRunnerPage /> },
       { path: 'flows/history', element: <FlowHistoryPage /> },

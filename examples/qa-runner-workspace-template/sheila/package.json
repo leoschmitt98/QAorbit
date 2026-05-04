@@ -1,0 +1,17 @@
+{
+  "name": "sheila-qa-runner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cy:open": "cypress open",
+    "cy:run": "cypress run",
+    "test:criar-agendamento": "cypress run --spec cypress/e2e/painel-admin/agendamento/criar-agendamento.cy.js",
+    "test:editar-agendamento": "cypress run --spec cypress/e2e/painel-admin/agendamento/editar-agendamento.cy.js",
+    "test:cancelar-agendamento": "cypress run --spec cypress/e2e/painel-admin/agendamento/cancelar-agendamento.cy.js",
+    "test:realizando-agendamento-de-servico-com-sucesso": "cypress run --spec cypress/e2e/painel-admin/agendamento/realizando-agendamento-de-servico-com-sucesso.cy.js"
+  },
+  "devDependencies": {
+    "cypress": "13.17.0"
+  }
+}

@@ -1,0 +1,169 @@
+{
+  "id": "smart-session-1777755987189-9ccedc91",
+  "name": "realizando agendamento de servico com sucesso",
+  "project": {
+    "id": 1,
+    "name": "Sheila"
+  },
+  "startUrl": "https://hml.sheilasystem.com.br/",
+  "environment": "hml",
+  "steps": [
+    {
+      "order": 1,
+      "action": "click",
+      "target": {
+        "strategy": "css",
+        "selector": "[data-cy='chat-option-agendar']",
+        "text": null,
+        "recommendedCommand": "get",
+        "fallbackSelector": "div:nth-of-type(3) > div > button:nth-of-type(1)"
+      },
+      "value": null,
+      "variableName": null,
+      "expectedResult": "Fluxo de agendamento iniciado.",
+      "selectorQuality": "strong",
+      "warning": "",
+      "improvementSuggestion": ""
+    },
+    {
+      "order": 2,
+      "action": "click",
+      "target": {
+        "strategy": "css",
+        "selector": "[data-cy='service-card-select-3']",
+        "text": null,
+        "recommendedCommand": "get",
+        "fallbackSelector": "div:nth-of-type(2) > div > button"
+      },
+      "value": null,
+      "variableName": null,
+      "expectedResult": "Servico desejado selecionado.",
+      "selectorQuality": "strong",
+      "warning": "Validar se o indice do servico permanece estavel entre ambientes.",
+      "improvementSuggestion": "Se possivel, usar data-cy sem indice numerico acoplado."
+    },
+    {
+      "order": 3,
+      "action": "click",
+      "target": {
+        "strategy": "text",
+        "selector": "button",
+        "text": "Gabi",
+        "recommendedCommand": "contains",
+        "fallbackSelector": "button"
+      },
+      "value": null,
+      "variableName": null,
+      "expectedResult": "Prestador selecionado para continuar o agendamento.",
+      "selectorQuality": "medium",
+      "warning": "Se o ambiente nao garantir sempre a prestadora Gabi, refinar este passo para selecionar o primeiro prestador disponivel.",
+      "improvementSuggestion": "Adicionar data-testid especifico no botao do prestador ou modelar regra de selecao dinamica."
+    },
+    {
+      "order": 4,
+      "action": "click",
+      "target": {
+        "strategy": "css",
+        "selector": "button[name='day']",
+        "text": null,
+        "recommendedCommand": "get",
+        "fallbackSelector": "tr:nth-of-type(2) > td:nth-of-type(2) > button",
+        "pick": "firstDayWithAvailableSlot",
+        "availabilitySelector": "[data-cy^='slot-time-']",
+        "emptyStateText": "Não há horários disponíveis nesta data."
+      },
+      "value": null,
+      "variableName": null,
+      "expectedResult": "Data de agendamento selecionada.",
+      "selectorQuality": "medium",
+      "warning": "O runner vai avancar para a proxima data visivel e habilitada ate encontrar horarios disponiveis. Refine se a regra precisar validar data futura com mais rigor.",
+      "improvementSuggestion": "Adicionar data-testid por dia ou modelar a regra funcional de data futura disponivel."
+    },
+    {
+      "order": 5,
+      "action": "click",
+      "target": {
+        "strategy": "css",
+        "selector": "[data-cy^='slot-time-']",
+        "text": null,
+        "recommendedCommand": "get",
+        "fallbackSelector": "div:nth-of-type(2) > div > button:nth-of-type(1)",
+        "pick": "firstVisibleEnabled"
+      },
+      "value": null,
+      "variableName": null,
+      "expectedResult": "Horario selecionado para o agendamento.",
+      "selectorQuality": "strong",
+      "warning": "O runner vai tentar clicar no primeiro horario visivel e habilitado. Refine se precisar priorizar uma faixa de horario especifica.",
+      "improvementSuggestion": "Se necessario, criar regra de negocio para priorizar horarios ou validar disponibilidade minima."
+    },
+    {
+      "order": 6,
+      "action": "type",
+      "target": {
+        "strategy": "css",
+        "selector": "[data-cy='booking-client-name']",
+        "text": null,
+        "recommendedCommand": "get",
+        "fallbackSelector": "#name"
+      },
+      "value": "{{clientName}}",
+      "variableName": "clientName",
+      "expectedResult": "Nome do cliente preenchido.",
+      "selectorQuality": "strong",
+      "warning": "",
+      "improvementSuggestion": "Manter parametrizado para reaproveitamento do fluxo."
+    },
+    {
+      "order": 7,
+      "action": "type",
+      "target": {
+        "strategy": "css",
+        "selector": "[data-cy='booking-client-phone']",
+        "text": null,
+        "recommendedCommand": "get",
+        "fallbackSelector": "#phone"
+      },
+      "value": "{{phone}}",
+      "variableName": "phone",
+      "expectedResult": "Telefone do cliente preenchido.",
+      "selectorQuality": "strong",
+      "warning": "",
+      "improvementSuggestion": ""
+    },
+    {
+      "order": 8,
+      "action": "click",
+      "target": {
+        "strategy": "css",
+        "selector": "[data-cy='booking-client-submit']",
+        "text": null,
+        "recommendedCommand": "get",
+        "fallbackSelector": "div > form > button"
+      },
+      "value": null,
+      "variableName": null,
+      "expectedResult": "Formulario enviado para concluir o agendamento.",
+      "selectorQuality": "strong",
+      "warning": "",
+      "improvementSuggestion": ""
+    },
+    {
+      "order": 9,
+      "action": "assertVisible",
+      "target": {
+        "strategy": "text",
+        "selector": "body",
+        "text": "Agendamento Realizado!",
+        "recommendedCommand": "contains",
+        "fallbackSelector": "body"
+      },
+      "value": null,
+      "variableName": null,
+      "expectedResult": "Mensagem final de agendamento realizado exibida ao final do fluxo.",
+      "selectorQuality": "medium",
+      "warning": "Ideal adicionar data-testid para a mensagem de sucesso ou para o card de confirmacao do agendamento.",
+      "improvementSuggestion": "Adicionar data-testid='booking-success-message' ou equivalente."
+    }
+  ]
+}
